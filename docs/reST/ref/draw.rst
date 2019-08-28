@@ -39,6 +39,10 @@ sequential drawing calls can be sped up by locking and unlocking the surface
 object around the draw calls (see :func:`pygame.Surface.lock` and
 :func:`pygame.Surface.unlock`).
 
+.. note ::
+   See the :mod:`pygame.gfxdraw` module for alternative draw methods.
+
+
 .. function:: rect
 
    | :sl:`draw a rectangle`
@@ -65,7 +69,7 @@ object around the draw calls (see :func:`pygame.Surface.lock` and
             When using ``width`` values ``> 1``, the edge lines will grow
             outside the original boundary of the rect. For more details on
             how the thickness for edge lines grow, refer to the ``width`` notes
-            for :func:`line`.
+            of the :func:`pygame.draw.line` function.
 
    :returns: a rect bounding the changed pixels, if nothing is drawn the
       bounding rect's position will be the position of the given ``rect``
@@ -110,11 +114,12 @@ object around the draw calls (see :func:`pygame.Surface.lock` and
             When using ``width`` values ``> 1``, the edge lines will grow
             outside the original boundary of the polygon. For more details on
             how the thickness for edge lines grow, refer to the ``width`` notes
-            for :func:`line`.
+            of the :func:`pygame.draw.line` function.
 
    :returns: a rect bounding the changed pixels, if nothing is drawn the
       bounding rect's position will be the position of the first point in the
-      ``points`` parameter and its width and height will be 0
+      ``points`` parameter (float values will be truncated) and its width and
+      height will be 0
    :rtype: Rect
 
    :raises ValueError: if ``len(points) < 3`` (must have at least 3 points)
@@ -144,14 +149,15 @@ object around the draw calls (see :func:`pygame.Surface.lock` and
       e.g. ``(x, y)``
    :type center: tuple(int or float, int or float) or
       list(int or float, int or float) or Vector2(int or float, int or float)
-   :param int radius: radius of the circle, measured from the ``center``
+   :param radius: radius of the circle, measured from the ``center``
       parameter, a radius of 0 will only draw the ``center`` pixel
+   :type radius: int or float 
    :param int width: (optional) used for line thickness or to indicate that
       the circle is to be filled
 
          | if ``width == 0``, (default) fill the circle
          | if ``width > 0``, used for line thickness
-         | if ``width < 0``, raises a ``ValueError``
+         | if ``width < 0``, nothing will be drawn
          |
 
          .. note::
@@ -159,11 +165,11 @@ object around the draw calls (see :func:`pygame.Surface.lock` and
             inward.
 
    :returns: a rect bounding the changed pixels, if nothing is drawn the
-      bounding rect's position will be the ``center`` parameter value and its
-      width and height will be 0
+      bounding rect's position will be the ``center`` parameter value (float
+      values will be truncated) and its width and height will be 0
    :rtype: Rect
 
-   :raises ValueError: if ``radius < 0`` or ``width < 0`` or ``width > radius``
+   :raises ValueError: if ``radius < 0``
 
    .. versionchanged:: 2.0.0 Added support for keyword arguments.
 
@@ -190,7 +196,7 @@ object around the draw calls (see :func:`pygame.Surface.lock` and
 
          | if ``width == 0``, (default) fill the ellipse
          | if ``width > 0``, used for line thickness
-         | if ``width < 0``, raises a ``ValueError``
+         | if ``width < 0``, nothing will be drawn
          |
 
          .. note::
@@ -201,9 +207,6 @@ object around the draw calls (see :func:`pygame.Surface.lock` and
       bounding rect's position will be the position of the given ``rect``
       parameter and its width and height will be 0
    :rtype: Rect
-
-   :raises ValueError: if ``width < 0`` or ``width > rect.w / 2`` or
-      ``width > rect.h / 2``
 
    .. versionchanged:: 2.0.0 Added support for keyword arguments.
 
@@ -247,8 +250,7 @@ object around the draw calls (see :func:`pygame.Surface.lock` and
 
          | if ``width == 0``, nothing will be drawn
          | if ``width > 0``, (default is 1) used for line thickness
-         | if ``width < 0``, raises a ``ValueError``
-         |
+         | if ``width < 0``, same as ``width == 0``
 
          .. note::
             When using ``width`` values ``> 1``, the edge lines will only grow
@@ -256,10 +258,8 @@ object around the draw calls (see :func:`pygame.Surface.lock` and
 
    :returns: a rect bounding the changed pixels, if nothing is drawn the
       bounding rect's position will be the position of the given ``rect``
+      parameter and its width and height will be 0
    :rtype: Rect
-
-   :raises ValueError: if ``width < 0`` or ``width > rect.w / 2`` or
-      ``width > rect.h / 2``
 
    .. versionchanged:: 2.0.0 Added support for keyword arguments.
 
@@ -291,7 +291,7 @@ object around the draw calls (see :func:`pygame.Surface.lock` and
          |
 
          .. note::
-            When using ``width`` values ``> 1`` lines will grow as follows.
+            When using ``width`` values ``> 1``, lines will grow as follows.
 
             For odd ``width`` values, the thickness of each line grows with the
             original line being in the center.
@@ -305,8 +305,8 @@ object around the draw calls (see :func:`pygame.Surface.lock` and
             the original line (in the x direction).
 
    :returns: a rect bounding the changed pixels, if nothing is drawn the
-      bounding rect's position will be the ``start_pos`` parameter (float values
-      will be truncated) and its width and height will be 0
+      bounding rect's position will be the ``start_pos`` parameter value (float
+      values will be truncated) and its width and height will be 0
    :rtype: Rect
 
    :raises TypeError: if ``start_pos`` or ``end_pos`` is not a sequence of
@@ -318,15 +318,50 @@ object around the draw calls (see :func:`pygame.Surface.lock` and
 
 .. function:: lines
 
-   | :sl:`draw multiple contiguous line segments`
-   | :sg:`lines(Surface, color, closed, pointlist, width=1) -> Rect`
+   | :sl:`draw multiple contiguous straight line segments`
+   | :sg:`lines(surface, color, closed, points) -> Rect`
+   | :sg:`lines(surface, color, closed, points, width=1) -> Rect`
 
-   Draw a sequence of lines on a Surface. The pointlist argument is a series of
-   points that are connected by a line. If the closed argument is true an
-   additional line segment is drawn between the first and last points.
+   Draws a sequence of contiguous straight lines on the given surface. There are
+   no endcaps or miter joints. For thick lines the ends are squared off.
+   Drawing thick lines with sharp corners can have undesired looking results.
 
-   This does not draw any endcaps or miter joints. Lines with sharp corners and
-   wide line widths can have improper looking corners.
+   :param Surface surface: surface to draw on
+   :param color: color to draw with, the alpha value is optional if using a
+      tuple ``(RGB[A])``
+   :type color: Color or int or tuple(int, int, int, [int])
+   :param bool closed: if ``True`` an additional line segment is drawn between
+      the first and last points in the ``points`` sequence
+   :param points: a sequence of 2 or more (x, y) coordinates, where each
+      *coordinate* in the sequence must be a
+      tuple/list/:class:`pygame.math.Vector2` of 2 ints/floats and adjacent
+      coordinates will be connected by a line segment, e.g. for the
+      points ``[(x1, y1), (x2, y2), (x3, y3)]`` a line segment will be drawn
+      from ``(x1, y1)`` to ``(x2, y2)`` and from ``(x2, y2)`` to ``(x3, y3)``,
+      additionally if the ``closed`` parameter is ``True`` another line segment
+      will be drawn from ``(x3, y3)`` to ``(x1, y1)``
+   :type points: tuple(coordinate) or list(coordinate)
+   :param int width: (optional) used for line thickness
+
+         | if width >= 1, used for line thickness (default is 1)
+         | if width < 1, nothing will be drawn
+         |
+
+         .. note::
+            When using ``width`` values ``> 1`` refer to the ``width`` notes
+            of :func:`line` for details on how thick lines grow.
+
+   :returns: a rect bounding the changed pixels, if nothing is drawn the
+      bounding rect's position will be the position of the first point in the
+      ``points`` parameter (float values will be truncated) and its width and
+      height will be 0
+   :rtype: Rect
+
+   :raises ValueError: if ``len(points) < 2`` (must have at least 2 points)
+   :raises TypeError: if ``points`` is not a sequence or ``points`` does not
+      contain number pairs
+
+   .. versionchanged:: 2.0.0 Added support for keyword arguments.
 
    .. ## pygame.draw.lines ##
 
@@ -352,8 +387,8 @@ object around the draw calls (see :func:`pygame.Surface.lock` and
       with the surface's existing pixel shades, otherwise it will overwrite them
 
    :returns: a rect bounding the changed pixels, if nothing is drawn the
-      bounding rect's position will be the ``start_pos`` parameter (float values
-      will be truncated) and its width and height will be 0
+      bounding rect's position will be the ``start_pos`` parameter value (float
+      values will be truncated) and its width and height will be 0
    :rtype: Rect
 
    :raises TypeError: if ``start_pos`` or ``end_pos`` is not a sequence of
@@ -365,15 +400,43 @@ object around the draw calls (see :func:`pygame.Surface.lock` and
 
 .. function:: aalines
 
-   | :sl:`draw a connected sequence of antialiased lines`
-   | :sg:`aalines(Surface, color, closed, pointlist, blend=1) -> Rect`
+   | :sl:`draw multiple contiguous straight antialiased line segments`
+   | :sg:`aalines(surface, color, closed, points) -> Rect`
+   | :sg:`aalines(surface, color, closed, points, blend=1) -> Rect`
 
-   Draws a sequence on a surface. You must pass at least two points in the
-   sequence of points. The closed argument is a simple Boolean and if true, a
-   line will be draw between the first and last points. The Boolean blend
-   argument set to true will blend the shades with existing shades instead of
-   overwriting them. This function accepts floating point values for the end
-   points.
+   Draws a sequence of contiguous straight antialiased lines on the given
+   surface.
+
+   :param Surface surface: surface to draw on
+   :param color: color to draw with, the alpha value is optional if using a
+      tuple ``(RGB[A])``
+   :type color: Color or int or tuple(int, int, int, [int])
+   :param bool closed: if ``True`` an additional line segment is drawn between
+      the first and last points in the ``points`` sequence
+   :param points: a sequence of 2 or more (x, y) coordinates, where each
+      *coordinate* in the sequence must be a
+      tuple/list/:class:`pygame.math.Vector2` of 2 ints/floats and adjacent
+      coordinates will be connected by a line segment, e.g. for the
+      points ``[(x1, y1), (x2, y2), (x3, y3)]`` a line segment will be drawn
+      from ``(x1, y1)`` to ``(x2, y2)`` and from ``(x2, y2)`` to ``(x3, y3)``,
+      additionally if the ``closed`` parameter is ``True`` another line segment
+      will be drawn from ``(x3, y3)`` to ``(x1, y1)``
+   :type points: tuple(coordinate) or list(coordinate)
+   :param int blend: (optional) if non-zero (default) each line will be blended
+      with the surface's existing pixel shades, otherwise the pixels will be
+      overwritten
+
+   :returns: a rect bounding the changed pixels, if nothing is drawn the
+      bounding rect's position will be the position of the first point in the
+      ``points`` parameter (float values will be truncated) and its width and
+      height will be 0
+   :rtype: Rect
+
+   :raises ValueError: if ``len(points) < 2`` (must have at least 2 points)
+   :raises TypeError: if ``points`` is not a sequence or ``points`` does not
+      contain number pairs
+
+   .. versionchanged:: 2.0.0 Added support for keyword arguments.
 
    .. ## pygame.draw.aalines ##
 

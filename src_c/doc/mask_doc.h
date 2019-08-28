@@ -3,6 +3,7 @@
 #define DOC_PYGAMEMASKFROMSURFACE "from_surface(Surface) -> Mask\nfrom_surface(Surface, threshold=127) -> Mask\nCreates a Mask from the given surface"
 #define DOC_PYGAMEMASKFROMTHRESHOLD "from_threshold(Surface, color) -> Mask\nfrom_threshold(Surface, color, threshold=(0, 0, 0, 255), othersurface=None, palette_colors=1) -> Mask\nCreates a mask by thresholding Surfaces"
 #define DOC_PYGAMEMASKMASK "Mask(size=(width, height)) -> Mask\nMask(size=(width, height), fill=False) -> Mask\npygame object for representing 2D bitmasks"
+#define DOC_MASKCOPY "copy() -> Mask\nReturns a new copy of the mask"
 #define DOC_MASKGETSIZE "get_size() -> (width, height)\nReturns the size of the mask"
 #define DOC_MASKGETRECT "get_rect(**kwargs) -> Rect\nReturns a Rect based on the size of the mask"
 #define DOC_MASKGETAT "get_at((x, y)) -> int\nGets the bit at the given position"
@@ -24,7 +25,7 @@
 #define DOC_MASKCONNECTEDCOMPONENT "connected_component() -> Mask\nconnected_component((x, y)) -> Mask\nReturns a mask containing a connected component"
 #define DOC_MASKCONNECTEDCOMPONENTS "connected_components() -> [Mask, ...]\nconnected_components(min=0) -> [Mask, ...]\nReturns a list of masks of connected components"
 #define DOC_MASKGETBOUNDINGRECTS "get_bounding_rects() -> [Rect, ...]\nReturns a list of bounding rects of connected components"
-#define DOC_MASKTOSURFACE "to_surface(surface)) -> Surface\nto_surface(surface, setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 255)) -> Surface\nReturns a surface with the mask drawn on it"
+#define DOC_MASKTOSURFACE "to_surface() -> Surface\nto_surface(surface=None, setsurface=None, unsetsurface=None, setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 255), dest=(0, 0)) -> Surface\nReturns a surface with the mask drawn on it"
 
 
 /* Docs in a comment... slightly easier to read. */
@@ -48,6 +49,10 @@ pygame.mask.Mask
  Mask(size=(width, height)) -> Mask
  Mask(size=(width, height), fill=False) -> Mask
 pygame object for representing 2D bitmasks
+
+pygame.mask.Mask.copy
+ copy() -> Mask
+Returns a new copy of the mask
 
 pygame.mask.Mask.get_size
  get_size() -> (width, height)
@@ -140,8 +145,8 @@ pygame.mask.Mask.get_bounding_rects
 Returns a list of bounding rects of connected components
 
 pygame.mask.Mask.to_surface
- to_surface(surface)) -> Surface
- to_surface(surface, setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 255)) -> Surface
+ to_surface() -> Surface
+ to_surface(surface=None, setsurface=None, unsetsurface=None, setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 255), dest=(0, 0)) -> Surface
 Returns a surface with the mask drawn on it
 
 */

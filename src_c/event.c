@@ -19,7 +19,7 @@
   Pete Shinners
   pete@shinners.org
 */
-    
+
 /*
  *  pygame event module
  */
@@ -95,7 +95,8 @@ pgEvent_AutoInit(PyObject *self, PyObject *args)
         pg_RegisterQuit(_pg_repeat_cleanup);
         _pg_event_is_init = 1;
     }
-    Py_RETURN_NONE;
+
+    return PyInt_FromLong(_pg_event_is_init);
 }
 
 static char _pg_last_unicode_char[32] = { 0 };
@@ -325,10 +326,12 @@ _pg_name_from_eventtype(int type)
         case SDL_ACTIVEEVENT:
             return "ActiveEvent";
 #if IS_SDLv2
+#ifndef NO_SDL_AUDIODEVICE
         case SDL_AUDIODEVICEADDED:
             return "AudioDeviceAdded";
         case SDL_AUDIODEVICEREMOVED:
             return "AudioDeviceRemoved";
+#endif
 #endif
         case SDL_KEYDOWN:
             return "KeyDown";
@@ -361,6 +364,8 @@ _pg_name_from_eventtype(int type)
         case SDL_NOEVENT:
             return "NoEvent";
 #if IS_SDLv2
+        case SDL_WINDOWEVENT:
+            return "WindowEvent";
         case SDL_FINGERMOTION:
             return "FingerMotion";
         case SDL_FINGERDOWN:
@@ -377,12 +382,14 @@ _pg_name_from_eventtype(int type)
             return "TextEditing";
         case SDL_DROPFILE:
             return "DropFile";
+#if SDL_VERSION_ATLEAST(2, 0, 5)
         case SDL_DROPTEXT:
             return "DropText";
         case SDL_DROPBEGIN:
             return "DropBegin";
         case SDL_DROPCOMPLETE:
             return "DropComplete";
+#endif /* SDL_VERSION_ATLEAST(2, 0, 5) */
         case SDL_CONTROLLERAXISMOTION:
             return "ControllerAxisMotion";
         case SDL_CONTROLLERBUTTONDOWN:
@@ -394,11 +401,11 @@ _pg_name_from_eventtype(int type)
         case SDL_CONTROLLERDEVICEREMOVED:
             return "ControllerDeviceRemoved";
         case SDL_CONTROLLERDEVICEREMAPPED:
-            return "ControllerDeviceMapped";        
+            return "ControllerDeviceMapped";
 #endif
 
     }
-    if (type >= SDL_USEREVENT && type < SDL_NUMEVENTS)
+    if (type >= PGE_USEREVENT && type < SDL_NUMEVENTS)
         return "UserEvent";
     return "Unknown";
 }
@@ -543,10 +550,12 @@ dict_from_event(SDL_Event *event)
             _pg_insobj(dict, "gain", PyInt_FromLong(gain));
             _pg_insobj(dict, "state", PyInt_FromLong(state));
             break;
+#ifndef NO_SDL_AUDIODEVICE
         case SDL_AUDIODEVICEADDED:
         case SDL_AUDIODEVICEREMOVED:
             _pg_insobj(dict, "which", PyInt_FromLong(&event->adevice.which));
             _pg_insobj(dict, "iscapture", PyInt_FromLong(&event->adevice.iscapture));
+#endif
             break;
         case SDL_KEYDOWN:
             _pg_insobj(dict, "unicode", Text_FromUTF8(_pg_last_unicode_char));
@@ -637,7 +646,11 @@ dict_from_event(SDL_Event *event)
             break;
         case SDL_MOUSEWHEEL:
             /* https://wiki.libsdl.org/SDL_MouseWheelEvent */
+#ifndef NO_SDL_MOUSEWHEEL_FLIPPED
             _pg_insobj(dict, "flipped", PyBool_FromLong(event->wheel.direction == SDL_MOUSEWHEEL_FLIPPED));
+#else
+            _pg_insobj(dict, "flipped", PyBool_FromLong(0));
+#endif
             _pg_insobj(dict, "y", PyInt_FromLong(event->wheel.y));
             _pg_insobj(dict, "x", PyInt_FromLong(event->wheel.x));
             _pg_insobj(dict, "which", PyInt_FromLong(event->wheel.which));
@@ -657,6 +670,8 @@ dict_from_event(SDL_Event *event)
             _pg_insobj(dict, "file", Text_FromUTF8(event->drop.file));
             SDL_free(event->drop.file);
             break;
+
+#if SDL_VERSION_ATLEAST(2, 0, 5)
         case SDL_DROPTEXT:
             _pg_insobj(dict, "text", Text_FromUTF8(event->drop.file));
             SDL_free(event->drop.file);
@@ -664,6 +679,8 @@ dict_from_event(SDL_Event *event)
         case SDL_DROPBEGIN:
         case SDL_DROPCOMPLETE:
             break;
+#endif /* SDL_VERSION_ATLEAST(2, 0, 5) */
+
         case SDL_CONTROLLERAXISMOTION:
             /* https://wiki.libsdl.org/SDL_ControllerAxisEvent */
             _pg_insobj(dict, "joy", PyLong_FromLong(event->caxis.which));
@@ -685,7 +702,7 @@ dict_from_event(SDL_Event *event)
 #endif
 
 
-#if IS_SDLv1    
+#if IS_SDLv1
         case SDL_VIDEORESIZE:
             obj = Py_BuildValue("(ii)", event->resize.w, event->resize.h);
             _pg_insobj(dict, "size", obj);
@@ -744,12 +761,12 @@ dict_from_event(SDL_Event *event)
 #endif /* (defined(unix) || ... */
             /* SDL_VIDEOEXPOSE and SDL_QUIT have no attributes */
     } /* switch (event->type) */
-    if (event->type == SDL_USEREVENT && event->user.code == 0x1000) {
+    if (event->type == PGE_USEREVENT && event->user.code == 0x1000) {
         _pg_insobj(dict, "filename", Text_FromUTF8(event->user.data1));
         free(event->user.data1);
         event->user.data1 = NULL;
     }
-    if (event->type >= SDL_USEREVENT && event->type < SDL_NUMEVENTS)
+    if (event->type >= PGE_USEREVENT && event->type < SDL_NUMEVENTS)
         _pg_insobj(dict, "code", PyInt_FromLong(event->user.code));
 
     switch (event->type) {
@@ -1610,11 +1627,12 @@ pg_event_post(PyObject *self, PyObject *args)
 static int
 _pg_check_event_in_range(int evt)
 {
-#if IS_SDLv1
+// #if IS_SDLv1
+//     return evt >= 0 && evt < SDL_NUMEVENTS;
+// #else /* IS_SDLv2 */
+//     return evt >= 0 && evt < PGE_EVENTEND; /* needed for extras */
+// #endif /* IS_S*DLv2 */
     return evt >= 0 && evt < SDL_NUMEVENTS;
-#else /* IS_SDLv2 */
-    return evt >= 0 && evt < PGE_EVENTEND; /* needed for extras */
-#endif /* IS_SDLv2 */
 }
 
 static PyObject *
@@ -1741,13 +1759,27 @@ pg_event_get_blocked(PyObject *self, PyObject *args)
     return PyInt_FromLong(isblocked);
 }
 
+
+int _custom_event = PGE_USEREVENT + 1;
+static PyObject *
+pg_event_custom_type(PyObject *self, PyObject *args)
+{
+    int result = _custom_event + 1;
+    if (result > SDL_NUMEVENTS) {
+        return RAISE(pgExc_SDLError, "pygame.event.custom_type made too many event types.");
+    }
+    _custom_event++;
+    return PyInt_FromLong(result);
+}
+
 static PyMethodDef _event_methods[] = {
 #if IS_SDLv2
     {"__PYGAMEinit__", pgEvent_AutoInit, METH_NOARGS,
      "auto initialize for event module"},
 #endif /* IS_SDLv2 */
 
-    {"Event", pg_Event, 3, DOC_PYGAMEEVENTEVENT},
+    {"Event", (PyCFunction)pg_Event, METH_VARARGS | METH_KEYWORDS,
+     DOC_PYGAMEEVENTEVENT},
     {"event_name", event_name, METH_VARARGS, DOC_PYGAMEEVENTEVENTNAME},
 
     {"set_grab", set_grab, METH_VARARGS, DOC_PYGAMEEVENTSETGRAB},
@@ -1764,6 +1796,8 @@ static PyMethodDef _event_methods[] = {
     {"set_allowed", pg_event_set_allowed, METH_VARARGS, DOC_PYGAMEEVENTSETALLOWED},
     {"set_blocked", pg_event_set_blocked, METH_VARARGS, DOC_PYGAMEEVENTSETBLOCKED},
     {"get_blocked", pg_event_get_blocked, METH_VARARGS, DOC_PYGAMEEVENTGETBLOCKED},
+    {"custom_type", pg_event_custom_type, METH_NOARGS, DOC_PYGAMEEVENTCUSTOMTYPE},
+
 
     {NULL, NULL, 0, NULL}};
 
@@ -1830,12 +1864,6 @@ MODINIT_DEFINE(event)
             MODINIT_ERROR;
         }
 
-        if (SDL_RegisterEvents(PGE_NUMEVENTS) != PGE_EVENTBEGIN) {
-            PyErr_SetString(PyExc_ImportError,
-                            "Unable to register pygame events");
-            DECREF_MOD(module);
-            MODINIT_ERROR;
-        }
         have_registered_events = 1;
     }
 

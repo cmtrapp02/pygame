@@ -120,7 +120,7 @@ static GAME_Rect *
 pgRect_FromObject(PyObject *obj, GAME_Rect *temp)
 {
     int val;
-    int length;
+    Py_ssize_t length;
 
     if (pgRect_Check(obj)) {
         return &((pgRectObject *)obj)->r;
@@ -225,6 +225,11 @@ pgRect_New4(int x, int y, int w, int h)
 static int
 _pg_do_rects_intersect(GAME_Rect *A, GAME_Rect *B)
 {
+    if (A->w == 0 || A->h == 0 || B->w == 0 || B->h == 0) {
+        // zero sized rects should not collide with anything #1197
+        return 0;
+    }
+
     // A.topleft < B.bottomright &&
     // A.bottomright > B.topleft
     return (A->x < B->x + B->w && A->y < B->y + B->h && A->x + A->w > B->x &&
@@ -342,7 +347,7 @@ static PyObject *
 pg_rect_unionall(pgRectObject *self, PyObject *args)
 {
     GAME_Rect *argrect, temp;
-    int loop, size;
+    Py_ssize_t loop, size;
     PyObject *list, *obj;
     int t, l, b, r;
 
@@ -371,10 +376,9 @@ pg_rect_unionall(pgRectObject *self, PyObject *args)
     for (loop = 0; loop < size; ++loop) {
         obj = PySequence_GetItem(list, loop);
         if (!obj || !(argrect = pgRect_FromObject(obj, &temp))) {
-            RAISE(PyExc_TypeError,
+            Py_XDECREF(obj);            
+            return RAISE(PyExc_TypeError,
                   "Argument must be a sequence of rectstyle objects.");
-            Py_XDECREF(obj);
-            break;
         }
         l = MIN(l, argrect->x);
         t = MIN(t, argrect->y);
@@ -389,7 +393,7 @@ static PyObject *
 pg_rect_unionall_ip(pgRectObject *self, PyObject *args)
 {
     GAME_Rect *argrect, temp;
-    int loop, size;
+    Py_ssize_t loop, size;
     PyObject *list, *obj;
     int t, l, b, r;
 
@@ -419,10 +423,9 @@ pg_rect_unionall_ip(pgRectObject *self, PyObject *args)
     for (loop = 0; loop < size; ++loop) {
         obj = PySequence_GetItem(list, loop);
         if (!obj || !(argrect = pgRect_FromObject(obj, &temp))) {
-            RAISE(PyExc_TypeError,
-                  "Argument must be a sequence of rectstyle objects.");
             Py_XDECREF(obj);
-            break;
+            return RAISE(PyExc_TypeError,
+                  "Argument must be a sequence of rectstyle objects.");
         }
         l = MIN(l, argrect->x);
         t = MIN(t, argrect->y);
@@ -558,31 +561,28 @@ pg_rect_collidedict(pgRectObject *self, PyObject *args)
 {
     GAME_Rect *argrect, temp;
     Py_ssize_t loop = 0;
-    Py_ssize_t values = 0;
+    Py_ssize_t values = 0; /* Defaults to expecting keys as rects. */
     PyObject *dict, *key, *val;
     PyObject *ret = NULL;
 
     if (!PyArg_ParseTuple(args, "O|i", &dict, &values)) {
         return NULL;
     }
+
     if (!PyDict_Check(dict)) {
-        return RAISE(PyExc_TypeError,
-                     "Argument must be a dict with rectstyle keys.");
+        return RAISE(PyExc_TypeError, "first argument must be a dict");
     }
 
     while (PyDict_Next(dict, &loop, &key, &val)) {
         if (values) {
             if (!(argrect = pgRect_FromObject(val, &temp))) {
-                RAISE(PyExc_TypeError,
-                      "Argument must be a dict with rectstyle values.");
-                break;
+                return RAISE(PyExc_TypeError,
+                             "dict must have rectstyle values");
             }
         }
         else {
             if (!(argrect = pgRect_FromObject(key, &temp))) {
-                RAISE(PyExc_TypeError,
-                      "Argument must be a dict with rectstyle keys.");
-                break;
+                return RAISE(PyExc_TypeError, "dict must have rectstyle keys");
             }
         }
 
@@ -603,18 +603,16 @@ pg_rect_collidedictall(pgRectObject *self, PyObject *args)
 {
     GAME_Rect *argrect, temp;
     Py_ssize_t loop = 0;
-    /* should we use values or keys? */
-    Py_ssize_t values = 0;
-
+    Py_ssize_t values = 0; /* Defaults to expecting keys as rects. */
     PyObject *dict, *key, *val;
     PyObject *ret = NULL;
 
     if (!PyArg_ParseTuple(args, "O|i", &dict, &values)) {
         return NULL;
     }
+
     if (!PyDict_Check(dict)) {
-        return RAISE(PyExc_TypeError,
-                     "Argument must be a dict with rectstyle keys.");
+        return RAISE(PyExc_TypeError, "first argument must be a dict");
     }
 
     ret = PyList_New(0);
@@ -626,14 +624,13 @@ pg_rect_collidedictall(pgRectObject *self, PyObject *args)
             if (!(argrect = pgRect_FromObject(val, &temp))) {
                 Py_DECREF(ret);
                 return RAISE(PyExc_TypeError,
-                             "Argument must be a dict with rectstyle values.");
+                             "dict must have rectstyle values");
             }
         }
         else {
             if (!(argrect = pgRect_FromObject(key, &temp))) {
                 Py_DECREF(ret);
-                return RAISE(PyExc_TypeError,
-                             "Argument must be a dict with rectstyle keys.");
+                return RAISE(PyExc_TypeError, "dict must have rectstyle keys");
             }
         }
 
@@ -1256,7 +1253,14 @@ pg_rect_setwidth(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1;
 
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
+
     if (!pg_IntFromObj(value, &val1)) {
+        RAISE(PyExc_TypeError, "invalid rect assignment");
         return -1;
     }
     self->r.w = val1;
@@ -1274,6 +1278,12 @@ static int
 pg_rect_setheight(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1;
+
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
 
     if (!pg_IntFromObj(value, &val1)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
@@ -1295,6 +1305,12 @@ pg_rect_settop(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1;
 
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
+
     if (!pg_IntFromObj(value, &val1)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
         return -1;
@@ -1314,6 +1330,12 @@ static int
 pg_rect_setleft(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1;
+
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
 
     if (!pg_IntFromObj(value, &val1)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
@@ -1335,6 +1357,12 @@ pg_rect_setright(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1;
 
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
+
     if (!pg_IntFromObj(value, &val1)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
         return -1;
@@ -1354,6 +1382,12 @@ static int
 pg_rect_setbottom(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1;
+
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
 
     if (!pg_IntFromObj(value, &val1)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
@@ -1375,6 +1409,12 @@ pg_rect_setcenterx(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1;
 
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
+
     if (!pg_IntFromObj(value, &val1)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
         return -1;
@@ -1395,6 +1435,12 @@ pg_rect_setcentery(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1;
 
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
+
     if (!pg_IntFromObj(value, &val1)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
         return -1;
@@ -1414,6 +1460,12 @@ static int
 pg_rect_settopleft(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1, val2;
+
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
 
     if (!pg_TwoIntsFromObj(value, &val1, &val2)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
@@ -1436,6 +1488,12 @@ pg_rect_settopright(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1, val2;
 
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
+
     if (!pg_TwoIntsFromObj(value, &val1, &val2)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
         return -1;
@@ -1456,6 +1514,12 @@ static int
 pg_rect_setbottomleft(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1, val2;
+
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
 
     if (!pg_TwoIntsFromObj(value, &val1, &val2)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
@@ -1478,6 +1542,12 @@ pg_rect_setbottomright(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1, val2;
 
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
+
     if (!pg_TwoIntsFromObj(value, &val1, &val2)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
         return -1;
@@ -1499,6 +1569,12 @@ pg_rect_setmidtop(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1, val2;
 
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
+
     if (!pg_TwoIntsFromObj(value, &val1, &val2)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
         return -1;
@@ -1519,6 +1595,12 @@ static int
 pg_rect_setmidleft(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1, val2;
+
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
 
     if (!pg_TwoIntsFromObj(value, &val1, &val2)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
@@ -1542,6 +1624,12 @@ pg_rect_setmidbottom(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1, val2;
 
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
+
     if (!pg_TwoIntsFromObj(value, &val1, &val2)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
         return -1;
@@ -1563,6 +1651,12 @@ static int
 pg_rect_setmidright(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1, val2;
+
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
 
     if (!pg_TwoIntsFromObj(value, &val1, &val2)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
@@ -1586,6 +1680,12 @@ pg_rect_setcenter(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1, val2;
 
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
+
     if (!pg_TwoIntsFromObj(value, &val1, &val2)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");
         return -1;
@@ -1606,6 +1706,12 @@ static int
 pg_rect_setsize(pgRectObject *self, PyObject *value, void *closure)
 {
     int val1, val2;
+
+    if (NULL == value) {
+        /* Attribute deletion not supported. */
+        PyErr_SetString(PyExc_AttributeError, "can't delete attribute");
+        return -1;
+    }
 
     if (!pg_TwoIntsFromObj(value, &val1, &val2)) {
         RAISE(PyExc_TypeError, "invalid rect assignment");

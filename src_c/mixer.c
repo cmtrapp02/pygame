@@ -61,10 +61,10 @@ const PG_sample_format_t PG_SAMPLE_CHAR_SIGN = (char)0xff > 0 ? 0 : 0x10000u;
    rather than taken from SDL_mixer. It also means that the default
    size is defined in Pygame, rather than SDL AUDIO_xxx, terms.
  */
-#define PYGAME_MIXER_DEFAULT_FREQUENCY 22050
+#define PYGAME_MIXER_DEFAULT_FREQUENCY 44100
 #define PYGAME_MIXER_DEFAULT_SIZE -16
 #define PYGAME_MIXER_DEFAULT_CHANNELS 2
-#define PYGAME_MIXER_DEFAULT_CHUNKSIZE 4096
+#define PYGAME_MIXER_DEFAULT_CHUNKSIZE 512
 #if IS_SDLv2
 #define PYGAME_MIXER_DEFAULT_ALLOWEDCHANGES SDL_AUDIO_ALLOW_FREQUENCY_CHANGE | \
                                             SDL_AUDIO_ALLOW_CHANNELS_CHANGE
@@ -268,7 +268,7 @@ endsound_callback(int channel)
             SDL_Event e;
             memset(&e, 0, sizeof(e));
             e.type = channeldata[channel].endevent;
-            if (e.type >= SDL_USEREVENT && e.type < SDL_NUMEVENTS)
+            if (e.type >= PGE_USEREVENT && e.type < SDL_NUMEVENTS)
                 e.user.code = channel;
             SDL_PushEvent(&e);
         }
@@ -1459,6 +1459,46 @@ mixer_unpause(PyObject *self)
     Py_RETURN_NONE;
 }
 
+/* Function to get the SDL mixer version data (linked or compiled).
+ *
+ * Ref: https://www.libsdl.org/projects/SDL_mixer/docs/SDL_mixer_8.html#SEC8
+ */
+static PyObject *
+mixer_get_sdl_mixer_version(PyObject *self, PyObject *args, PyObject *kwargs)
+{
+    PyObject *linkedobj = NULL;
+    int linked = 1; /* Default is linked version. */
+
+    static char *keywords[] = {"linked", NULL};
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|O", keywords,
+                                     &linkedobj)) {
+        return NULL; /* Exception already set. */
+    }
+
+    if (NULL != linkedobj) {
+        linked = PyObject_IsTrue(linkedobj);
+
+        if (-1 == linked) {
+            return RAISE(PyExc_TypeError, "linked argument must be a boolean");
+        }
+    }
+
+    /* MIXER_INIT_CHECK() is not required for these methods. */
+
+    if (linked) {
+        /* linked version */
+        const SDL_version *v = Mix_Linked_Version();
+        return Py_BuildValue("iii", v->major, v->minor, v->patch);
+    }
+    else {
+        /* compiled version */
+        SDL_version v;
+        SDL_MIXER_VERSION(&v);
+        return Py_BuildValue("iii", v.major, v.minor, v.patch);
+    }
+}
+
 static int
 _chunk_from_buf(const void *buf, Py_ssize_t len, Mix_Chunk **chunk,
                 Uint8 **mem)
@@ -1729,8 +1769,11 @@ sound_init(PyObject *self, PyObject *arg, PyObject *kwarg)
         chunk = Mix_LoadWAV_RW(rw, 1);
         Py_END_ALLOW_THREADS;
         if (chunk == NULL) {
-            if (obj)
-                return RAISE(pgExc_SDLError, SDL_GetError());
+            if (obj) {
+                RAISE(pgExc_SDLError, SDL_GetError());
+                return -1;
+            }
+
             obj = pg_EncodeString(file, NULL, NULL, NULL);
             if (obj == Py_None) {
                 RAISE(pgExc_SDLError, SDL_GetError());
@@ -1861,6 +1904,8 @@ static PyMethodDef _mixer_methods[] = {
     {"pause", (PyCFunction)mixer_pause, METH_NOARGS, DOC_PYGAMEMIXERPAUSE},
     {"unpause", (PyCFunction)mixer_unpause, METH_NOARGS,
      DOC_PYGAMEMIXERUNPAUSE},
+    {"get_sdl_mixer_version", (PyCFunction)mixer_get_sdl_mixer_version,
+     METH_VARARGS | METH_KEYWORDS, DOC_PYGAMEMIXERGETSDLMIXERVERSION},
     /*  { "lookup_frequency", lookup_frequency, 1, doc_lookup_frequency },*/
 
     {NULL, NULL, 0, NULL}};

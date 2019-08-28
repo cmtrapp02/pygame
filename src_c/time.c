@@ -29,7 +29,7 @@
 #define WORST_CLOCK_ACCURACY 12
 
 #if IS_SDLv2
-#define pgNUMEVENTS (16 + (SDL_NUMEVENTS - SDL_USEREVENT))
+#define pgNUMEVENTS (16 + (SDL_NUMEVENTS - PGE_USEREVENT))
 #else /* IS_SDLv1 */
 #define pgNUMEVENTS SDL_NUMEVENTS
 #endif /* IS_SDLv1 */
@@ -40,7 +40,7 @@ static SDL_TimerID event_timers[pgNUMEVENTS] = {0};
 static size_t
 enumerate_event(Uint32 type)
 {
-    assert(pgNUMEVENTS == 1 + 15 + (SDL_NUMEVENTS - SDL_USEREVENT));
+    assert(pgNUMEVENTS == 1 + 15 + (SDL_NUMEVENTS - PGE_USEREVENT));
     switch (type) {
         case SDL_ACTIVEEVENT:
             return 1;
@@ -73,11 +73,12 @@ enumerate_event(Uint32 type)
         case SDL_SYSWMEVENT:
             return 15;
     }
-    if (type >= SDL_USEREVENT && type < SDL_NUMEVENTS)
-        return type - SDL_USEREVENT + 16;
+    if (type >= PGE_USEREVENT && type < SDL_NUMEVENTS)
+        return type - PGE_USEREVENT + 16;
     return 0;
 }
 #endif /* IS_SDLv2 */
+
 
 static Uint32
 timer_callback(Uint32 interval, void *param)
@@ -90,6 +91,13 @@ timer_callback(Uint32 interval, void *param)
     }
     return interval;
 }
+
+static Uint32
+timer_callback_once(Uint32 interval, void *param)
+{
+    return timer_callback(0, param);
+}
+
 
 static int
 accurate_delay(int ticks)
@@ -190,9 +198,10 @@ time_set_timer(PyObject *self, PyObject *arg)
 {
     SDL_TimerID newtimer;
     int ticks = 0;
+    int once = 0;
     SDL_EventType event;
     size_t index;
-    if (!PyArg_ParseTuple(arg, "ii", &event, &ticks))
+    if (!PyArg_ParseTuple(arg, "ii|i", &event, &ticks, &once))
         return NULL;
 
     index = enumerate_event(event);
@@ -201,8 +210,8 @@ time_set_timer(PyObject *self, PyObject *arg)
 
     /*stop original timer*/
     if (event_timers[index]) {
-        SDL_RemoveTimer(event_timers[event]);
-        event_timers[event] = 0;
+        SDL_RemoveTimer(event_timers[index]);
+        event_timers[index] = 0;
     }
 
     if (ticks <= 0)
@@ -214,7 +223,11 @@ time_set_timer(PyObject *self, PyObject *arg)
             return RAISE(pgExc_SDLError, SDL_GetError());
     }
 
-    newtimer = SDL_AddTimer(ticks, timer_callback, (void *)event);
+    if (once) {
+        newtimer = SDL_AddTimer(ticks, timer_callback_once, (void *)event);
+    } else {
+        newtimer = SDL_AddTimer(ticks, timer_callback, (void *)event);
+    }
     if (!newtimer)
         return RAISE(pgExc_SDLError, SDL_GetError());
     event_timers[index] = newtimer;
@@ -227,8 +240,9 @@ time_set_timer(PyObject *self, PyObject *arg)
 {
     SDL_TimerID newtimer;
     int ticks = 0;
+    int once = 0;
     intptr_t event = SDL_NOEVENT;
-    if (!PyArg_ParseTuple(arg, "ii", &event, &ticks))
+    if (!PyArg_ParseTuple(arg, "ii|i", &event, &ticks, &once))
         return NULL;
 
     if (event <= SDL_NOEVENT || event >= SDL_NUMEVENTS)
@@ -250,7 +264,11 @@ time_set_timer(PyObject *self, PyObject *arg)
             return RAISE(pgExc_SDLError, SDL_GetError());
     }
 
-    newtimer = SDL_AddTimer(ticks, timer_callback, (void *)event);
+    if (once) {
+        newtimer = SDL_AddTimer(ticks, timer_callback_once, (void *)event);
+    } else {
+        newtimer = SDL_AddTimer(ticks, timer_callback, (void *)event);
+    }
     if (!newtimer)
         return RAISE(pgExc_SDLError, SDL_GetError());
     event_timers[event] = newtimer;

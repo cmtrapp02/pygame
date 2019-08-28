@@ -129,12 +129,42 @@ to store which parts collide.
    :returns: a newly created :class:`Mask` object
    :rtype: Mask
 
+   .. versionchanged:: 2.0.0
+      Shallow copy support added. The :class:`Mask` class supports the special
+      method ``__copy__()`` and shallow copying via ``copy.copy(mask)``.
    .. versionchanged:: 2.0.0 Subclassing support added. The :class:`Mask` class
       can be used as a base class.
    .. versionchanged:: 1.9.5 Added support for keyword arguments.
    .. versionchanged:: 1.9.5 Added the optional keyword parameter ``fill``.
    .. versionchanged:: 1.9.5 Added support for masks with a width and/or a
       height of 0.
+
+   .. method:: copy
+
+      | :sl:`Returns a new copy of the mask`
+      | :sg:`copy() -> Mask`
+
+      :returns: a new copy of this mask, the new mask will have the same width,
+         height, and set/unset bits as the original
+      :rtype: Mask
+
+      .. note::
+         If a mask subclass needs to copy any instance specific attributes
+         then it should override the ``__copy__()`` method. The overridden
+         ``__copy__()`` method needs to call ``super().__copy__()`` and then
+         copy the required data as in the following example code.
+
+         ::
+
+            class SubMask(pygame.mask.Mask):
+                def __copy__(self):
+                    new_mask = super().__copy__()
+                    # Do any SubMask attribute copying here.
+                    return new_mask
+
+      .. versionadded:: 2.0.0
+
+      .. ## Mask.copy ##
 
    .. method:: get_size
 
@@ -213,12 +243,15 @@ to store which parts collide.
       Returns the first point of intersection encountered between this mask and
       ``othermask``. A point of intersection is 2 overlapping set bits.
 
-      The current algorithm searches the overlapping area in 32 bit wide blocks.
-      Starting at the top left corner (``(0, 0)``), it checks bits 0 to 31 of
-      the first row (``(0, 0)`` to ``(31, 0)``) then continues to the next row. 
-      Once this entire 32 bit column is checked, it continues to the next 32 bit
-      column (32 to 63). This is repeated until it finds a point of intersection
-      or the entire overlapping area is checked.
+      The current algorithm searches the overlapping area in
+      ``sizeof(unsigned long int) * CHAR_BIT`` bit wide column blocks (the value
+      of ``sizeof(unsigned long int) * CHAR_BIT`` is platform dependent, for
+      clarity it will be referred to as ``W``). Starting at the top left corner
+      it checks bits 0 to ``W - 1`` of the first row (``(0, 0)`` to
+      ``(W - 1, 0)``) then continues to the next row (``(0, 1)`` to
+      ``(W - 1, 1)``). Once this entire column block is checked, it continues to
+      the next one (``W`` to ``2 * W - 1``). This is repeated until it finds a
+      point of intersection or the entire overlapping area is checked.
 
       :param Mask othermask: the other mask to overlap with this mask
       :param offset: the offset of ``othermask`` from this mask, for more
@@ -538,25 +571,69 @@ to store which parts collide.
    .. method:: to_surface
 
       | :sl:`Returns a surface with the mask drawn on it`
-      | :sg:`to_surface(surface)) -> Surface`
-      | :sg:`to_surface(surface, setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 255)) -> Surface`
+      | :sg:`to_surface() -> Surface`
+      | :sg:`to_surface(surface=None, setsurface=None, unsetsurface=None, setcolor=(255, 255, 255, 255), unsetcolor=(0, 0, 0, 255), dest=(0, 0)) -> Surface`
 
-      Draws this mask on the given surface.
+      Draws this mask on the given surface. Set bits (bits set to 1) and unset
+      bits (bits set to 0) can be drawn onto a surface.
 
-      :param Surface surface: Surface to draw mask onto
-      :param setcolor: (optional) color to draw set bits (bits set to 1),
-         (default is ``(255, 255, 255, 255)``, white), use ``None`` to skip
-         drawing the set bits
+      :param surface: (optional) Surface to draw mask onto, if no surface is
+         provided one will be created (default is ``None``, which will cause a
+         surface with the parameters
+         ``Surface(size=mask.get_size(), flags=SRCALPHA, depth=32)`` to be
+         created, drawn on, and returned)
+      :type surface: Surface or None
+      :param setsurface: (optional) use this surface's color values to draw
+         set bits (default is ``None``), if this surface is smaller than the
+         mask any bits outside its bounds will use the ``setcolor`` value
+      :type setsurface: Surface or None
+      :param unsetsurface: (optional) use this surface's color values to draw
+         unset bits (default is ``None``), if this surface is smaller than the
+         mask any bits outside its bounds will use the ``unsetcolor`` value
+      :type unsetsurface: Surface or None
+      :param setcolor: (optional) color to draw set bits (default is
+         ``(255, 255, 255, 255)``, white), use ``None`` to skip drawing the set
+         bits, the ``setsurface`` parameter (if set) will takes precedence over
+         this parameter
       :type setcolor: Color or int or tuple(int, int, int, [int]) or
          list(int, int, int, [int]) or None
-      :param unsetcolor: (optional) color to draw unset bits (bits set to 0),
-         (default is ``(0, 0, 0, 255)``, black), use ``None`` to skip drawing
-         the unset bits
+      :param unsetcolor: (optional) color to draw unset bits (default is
+         ``(0, 0, 0, 255)``, black), use ``None`` to skip drawing the unset
+         bits, the ``unsetsurface`` parameter (if set) will takes precedence
+         over this parameter
       :type unsetcolor: Color or int or tuple(int, int, int, [int]) or
          list(int, int, int, [int]) or None
+      :param dest: (optional) surface destination of where to position the
+         topleft corner of the mask being drawn (default is ``(0, 0)``), if a
+         Rect is used as the ``dest`` parameter, its ``x`` and ``y`` attributes
+         will be used as the destination, **NOTE1:** rects with a negative width
+         or height value will not be normalized before using their ``x`` and
+         ``y`` values, **NOTE2:** this destination value is only used to
+         position the mask on the surface, it does not offset the ``setsurface``
+         and ``unsetsurface`` from the mask, they are always aligned with the
+         mask (i.e. position ``(0, 0)`` on the mask always corresponds to
+         position ``(0, 0)`` on the ``setsurface`` and ``unsetsurface``)
+      :type dest: Rect or tuple(int, int) or list(int, int) or Vector2(int, int)
 
-      :returns: the ``surface`` parameter with this mask drawn on it
+      :returns: the ``surface`` parameter (or a newly created surface if no
+         ``surface`` parameter was provided) with this mask drawn on it
       :rtype: Surface
+
+      :raises ValueError: if the ``setsurface`` parameter or ``unsetsurface``
+         parameter does not have the same format (bytesize/bitsize/alpha) as
+         the ``surface`` parameter
+
+      .. note ::
+         To skip drawing the set bits, both ``setsurface`` and ``setcolor`` must
+         be ``None``. The ``setsurface`` parameter defaults to ``None``, but
+         ``setcolor`` defaults to a color value and therefore must be set to
+         ``None``.
+
+      .. note ::
+         To skip drawing the unset bits, both ``unsetsurface`` and
+         ``unsetcolor`` must be ``None``. The ``unsetsurface`` parameter
+         defaults to ``None``, but ``unsetcolor`` defaults to a color value and
+         therefore must be set to ``None``.
 
       .. versionadded:: 2.0.0
 

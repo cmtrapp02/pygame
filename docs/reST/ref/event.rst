@@ -67,11 +67,11 @@ specific attributes.
 
 ::
 
-    QUIT	      none
-    ACTIVEEVENT	      gain, state
-    KEYDOWN	      unicode, key, mod
-    KEYUP	      key, mod
-    MOUSEMOTION	      pos, rel, buttons
+    QUIT              none
+    ACTIVEEVENT       gain, state
+    KEYDOWN           key, mod, unicode, scancode
+    KEYUP             key, mod
+    MOUSEMOTION       pos, rel, buttons
     MOUSEBUTTONUP     pos, button
     MOUSEBUTTONDOWN   pos, button
     JOYAXISMOTION     joy, axis, value
@@ -116,10 +116,11 @@ attributes.
 
 |
 
-.. versionadded:: 2.0
+.. versionadded:: 2.0.0
 
 pygame can recognize text or files dropped in its window. If a file
-is dropped, ``file`` will be its path.
+is dropped, ``file`` will be its path. The ``DROPTEXT`` event is only supported
+on X11.
 
 ::
 
@@ -130,7 +131,6 @@ is dropped, ``file`` will be its path.
 
 |
 
-``DROPTEXT`` is only supported on X11.
 
 .. function:: pump
 
@@ -330,6 +330,19 @@ is dropped, ``file`` will be its path.
    If the event queue is full a :exc:`pygame.error` is raised.
 
    .. ## pygame.event.post ##
+
+.. function:: custom_type
+
+   | :sl:`make custom user event type`
+   | :sg:`custom_type() -> int`
+
+   Reserves a ``pygame.USEREVENT`` for a custom use.
+
+   If too many events are made a :exc:`pygame.error` is raised.
+
+   .. versionadded:: 2.0.0.dev3
+
+   .. ## pygame.event.custom_type ##
 
 .. function:: Event
 

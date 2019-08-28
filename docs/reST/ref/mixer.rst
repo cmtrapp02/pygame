@@ -100,13 +100,15 @@ change the default buffer by calling :func:`pygame.mixer.pre_init` before
       to 3072.
    .. versionchanged:: 1.9.1 The default ``buffersize`` was changed from 3072
       to 4096.
+   .. versionchanged:: 2.0.0 The default ``buffersize`` was changed from 4096
+      to 512. The default frequency changed to 44100 from 22050.
 
    .. ## pygame.mixer.init ##
 
 .. function:: pre_init
 
    | :sl:`preset the mixer init arguments`
-   | :sg:`pre_init(frequency=22050, size=-16, channels=2, buffer=4096, devicename=None) -> None`
+   | :sg:`pre_init(frequency=44100, size=-16, channels=2, buffer=512, devicename=None) -> None`
 
    Call pre_init to change the defaults used when the real
    ``pygame.mixer.init()`` is called. Keyword arguments are accepted. The best
@@ -119,6 +121,8 @@ change the default buffer by calling :func:`pygame.mixer.pre_init` before
       to 3072.
    .. versionchanged:: 1.9.1 The default ``buffersize`` was changed from 3072
       to 4096.
+   .. versionchanged:: 2.0.0 The default ``buffersize`` was changed from 4096
+      to 512. The default frequency changed to 44100 from 22050.
 
    .. ## pygame.mixer.pre_init ##
 
@@ -240,6 +244,27 @@ change the default buffer by calling :func:`pygame.mixer.pre_init` before
    idle then this return ``False``.
 
    .. ## pygame.mixer.get_busy ##
+
+.. function:: get_sdl_mixer_version
+
+   | :sl:`get the mixer's SDL version`
+   | :sg:`get_sdl_mixer_version() -> (major, minor, patch)`
+   | :sg:`get_sdl_mixer_version(linked=True) -> (major, minor, patch)`
+
+   :param bool linked: if ``True`` (default) the linked version number is
+      returned, otherwise the compiled version number is returned
+
+   :returns: the mixer's SDL library version number (linked or compiled
+      depending on the ``linked`` parameter) as a tuple of 3 integers
+      ``(major, minor, patch)``
+   :rtype: tuple
+
+   .. note::
+      The linked and compile version numbers should be the same.
+
+   .. versionadded:: 2.0.0
+
+   .. ## pygame.mixer.get_sdl_mixer_version ##
 
 .. class:: Sound
 
