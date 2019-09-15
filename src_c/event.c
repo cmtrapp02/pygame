@@ -361,6 +361,10 @@ _pg_name_from_eventtype(int type)
             return "VideoResize";
         case SDL_VIDEOEXPOSE:
             return "VideoExpose";
+        case PGE_MIDIIN:
+            return "MidiIn";
+        case PGE_MIDIOUT:
+            return "MidiOut";
         case SDL_NOEVENT:
             return "NoEvent";
 #if IS_SDLv2
@@ -405,7 +409,7 @@ _pg_name_from_eventtype(int type)
 #endif
 
     }
-    if (type >= PGE_USEREVENT && type < SDL_NUMEVENTS)
+    if (type >= PGE_USEREVENT && type < PG_NUMEVENTS)
         return "UserEvent";
     return "Unknown";
 }
@@ -766,7 +770,7 @@ dict_from_event(SDL_Event *event)
         free(event->user.data1);
         event->user.data1 = NULL;
     }
-    if (event->type >= PGE_USEREVENT && event->type < SDL_NUMEVENTS)
+    if (event->type >= PGE_USEREVENT && event->type < PG_NUMEVENTS)
         _pg_insobj(dict, "code", PyInt_FromLong(event->user.code));
 
     switch (event->type) {
@@ -1628,11 +1632,11 @@ static int
 _pg_check_event_in_range(int evt)
 {
 // #if IS_SDLv1
-//     return evt >= 0 && evt < SDL_NUMEVENTS;
+//     return evt >= 0 && evt < PG_NUMEVENTS;
 // #else /* IS_SDLv2 */
 //     return evt >= 0 && evt < PGE_EVENTEND; /* needed for extras */
 // #endif /* IS_S*DLv2 */
-    return evt >= 0 && evt < SDL_NUMEVENTS;
+    return evt >= 0 && evt < PG_NUMEVENTS;
 }
 
 static PyObject *
@@ -1760,16 +1764,14 @@ pg_event_get_blocked(PyObject *self, PyObject *args)
 }
 
 
-int _custom_event = PGE_USEREVENT + 1;
+int _custom_event = PGE_USEREVENT;
 static PyObject *
 pg_event_custom_type(PyObject *self, PyObject *args)
 {
-    int result = _custom_event + 1;
-    if (result > SDL_NUMEVENTS) {
+    if (_custom_event > PG_NUMEVENTS) {
         return RAISE(pgExc_SDLError, "pygame.event.custom_type made too many event types.");
     }
-    _custom_event++;
-    return PyInt_FromLong(result);
+    return PyInt_FromLong(_custom_event++);
 }
 
 static PyMethodDef _event_methods[] = {
@@ -1849,7 +1851,7 @@ MODINIT_DEFINE(event)
 
 #if IS_SDLv2
     if (!have_registered_events) {
-        int numevents = SDL_NUMEVENTS - SDL_USEREVENT;
+        int numevents = PG_NUMEVENTS - SDL_USEREVENT;
         Uint32 user_event = SDL_RegisterEvents(numevents);
 
         if (user_event == (Uint32)-1) {

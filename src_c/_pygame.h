@@ -87,15 +87,17 @@ typedef enum {
     SDL_VIDEORESIZE,
     SDL_VIDEOEXPOSE,
     PGE_KEYREPEAT,
+    PGE_MIDIIN,
+    PGE_MIDIOUT,
     PGE_EVENTEND, /* Not an event. Indicates end of pygame events. */
 
     /* User event range. */
     /* SDL 1.2 allowed for 8 user defined events. */
     PGE_USEREVENT = PGE_EVENTEND,
-    SDL_NUMEVENTS = PGE_USEREVENT + 0x2000 /* Not an event. Indicates end of user events. */
+    PG_NUMEVENTS = PGE_USEREVENT + 0x2000 /* Not an event. Indicates end of user events. */
 } PygameEventCode;
 
-#define PGE_NUMEVENTS (PGE_EVENTEND - PGE_EVENTBEGIN)
+#define PGE_NUMRESERVED (PGE_EVENTEND - PGE_EVENTBEGIN)
 
 typedef enum {
     SDL_APPFOCUSMOUSE,
@@ -129,7 +131,16 @@ typedef enum {
     PGS_SRCALPHA = 0x00010000,
     PGS_PREALLOC = 0x01000000
 } PygameSurfaceFlags;
-#endif /* SDL_VERSION_ATLEAST(2, 0, 0) */
+#else /* ~SDL_VERSION_ATLEAST(2, 0, 0) */
+/* To maintain SDL 1.2 build support. */
+#define PGE_USEREVENT SDL_USEREVENT
+#define PG_NUMEVENTS SDL_NUMEVENTS
+/* These midi events were originally defined in midi.py.
+ * Note: They are outside the SDL_USEREVENT/SDL_NUMEVENTS event range for
+ * SDL 1.2. */
+#define PGE_MIDIIN PGE_USEREVENT + 10
+#define PGE_MIDIOUT PGE_USEREVENT + 11
+#endif /* ~SDL_VERSION_ATLEAST(2, 0, 0) */
 
 #define RAISE(x, y) (PyErr_SetString((x), (y)), (PyObject *)NULL)
 
