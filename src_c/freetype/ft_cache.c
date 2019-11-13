@@ -77,7 +77,7 @@ set_node_key(NodeKey *key, GlyphIndex_t id, const FontRenderMode *mode)
 static int
 equal_node_keys(const NodeKey *a, const NodeKey *b)
 {
-    int i;
+    size_t i;
 
     for (i = 0; i < sizeof(a->dwords) / sizeof(a->dwords[0]); ++i) {
         if (a->dwords[i] != b->dwords[i]) {
@@ -218,7 +218,10 @@ _PGFT_Cache_Cleanup(FontCache *cache)
                     cache->_debug_delete_count++;
 #endif
 
-                    prev->next = 0;
+                    if (prev) {
+                        prev->next = 0;
+                    }
+
                     free_node(cache, node);
                     break;
                 }

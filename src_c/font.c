@@ -411,7 +411,7 @@ font_render(PyObject *self, PyObject *args)
             PyErr_Clear();
             return RAISE_TEXT_TYPE_ERROR();
         }
-        surf = SDL_CreateRGBSurface(SDL_SWSURFACE, 1, height, 32, 0xff << 16,
+        surf = SDL_CreateRGBSurface(SDL_SWSURFACE, 0, height, 32, 0xff << 16,
                                     0xff << 8, 0xff, 0);
         if (surf == NULL) {
             return RAISE(pgExc_SDLError, SDL_GetError());
@@ -432,7 +432,7 @@ font_render(PyObject *self, PyObject *args)
             return NULL;
         }
         astring = Bytes_AsString(bytes);
-        if (strlen(astring) != Bytes_GET_SIZE(bytes)) {
+        if (strlen(astring) != (size_t)Bytes_GET_SIZE(bytes)) {
             Py_DECREF(bytes);
             return RAISE(PyExc_ValueError,
                          "A null character was found in the text");
@@ -459,7 +459,7 @@ font_render(PyObject *self, PyObject *args)
     else if (Bytes_Check(text)) {
         const char *astring = Bytes_AsString(text);
 
-        if (strlen(astring) != Bytes_GET_SIZE(text)) {
+        if (strlen(astring) != (size_t)Bytes_GET_SIZE(text)) {
             return RAISE(PyExc_ValueError,
                          "A null character was found in the text");
         }
@@ -581,7 +581,7 @@ font_metrics(PyObject *self, PyObject *args)
         Py_DECREF(obj);
         return NULL;
     }
-    buffer = Bytes_AS_STRING(obj);
+    buffer = (Uint16 *)Bytes_AS_STRING(obj);
     length = Bytes_GET_SIZE(obj) / sizeof(Uint16);
     for (i = 1 /* skip BOM */; i < length; i++) {
         ch = buffer[i];
@@ -609,6 +609,7 @@ font_metrics(PyObject *self, PyObject *args)
                 i++;
         }
         PyList_Append(list, listitem);
+        Py_DECREF(listitem);
     }
     Py_DECREF(obj);
     return list;
@@ -669,7 +670,7 @@ font_init(PyFontObject *self, PyObject *args, PyObject *kwds)
     }
 
     if (!font_initialized) {
-        RAISE(pgExc_SDLError, "font not initialized");
+        PyErr_SetString(pgExc_SDLError, "font not initialized");
         return -1;
     }
 
@@ -765,14 +766,14 @@ fileobject:
         font = TTF_OpenFontIndexRW(rw, 1, fontsize, 0);
         Py_END_ALLOW_THREADS;
 #else
-        RAISE(PyExc_NotImplementedError,
-              "nonstring fonts require SDL_ttf-2.0.6");
+        PyErr_SetString(PyExc_NotImplementedError,
+                        "nonstring fonts require SDL_ttf-2.0.6");
         goto error;
 #endif
     }
 
     if (font == NULL) {
-        RAISE(PyExc_RuntimeError, SDL_GetError());
+        PyErr_SetString(PyExc_RuntimeError, SDL_GetError());
         goto error;
     }
 
@@ -783,7 +784,7 @@ fileobject:
 
 error:
     Py_XDECREF(oencoded);
-    Py_DECREF(obj);
+    Py_XDECREF(obj);
     return -1;
 }
 

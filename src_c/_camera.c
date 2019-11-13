@@ -1258,8 +1258,6 @@ uyvy_to_yuv(const void *src, void *dst, int length, SDL_PixelFormat *format)
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-/* FIXME: Seems to be grayscale and kind of dark on the OLPC XO
-          Maybe the result of a different Bayer color order on the screen? */
 /* TODO: Certainly not the most efficient way of doing this conversion. */
 void
 sbggr8_to_rgb(const void *src, void *dst, int width, int height,
@@ -1716,7 +1714,7 @@ PyMethodDef cameraobj_builtins[] = {
     {"stop", (PyCFunction)camera_stop, METH_NOARGS, DOC_CAMERASTOP},
     {"get_controls", (PyCFunction)camera_get_controls, METH_NOARGS,
      DOC_CAMERAGETCONTROLS},
-    {"set_controls", (PyCFunction)camera_set_controls, METH_KEYWORDS,
+    {"set_controls", (PyCFunction)camera_set_controls, METH_VARARGS | METH_KEYWORDS,
      DOC_CAMERASETCONTROLS},
     {"get_size", (PyCFunction)camera_get_size, METH_NOARGS, DOC_CAMERAGETSIZE},
     {"query_image", (PyCFunction)camera_query_image, METH_NOARGS,

@@ -868,7 +868,6 @@ _pxarray_subscript_internal(pgPixelArrayObject *array, Py_ssize_t xstart,
 
     if (!array->shape[1]) {
         ystart = 0;
-        ystop = 1;
         ystep = 0;
     }
     if (!(xstep || ystep)) {
@@ -1027,7 +1026,7 @@ _array_assign_array(pgPixelArrayObject *array, Py_ssize_t low, Py_ssize_t high,
     if (SURFACE_EQUALS(array, val)) {
         /* We assign a different view or so. Copy the source buffer. */
         size_t size = (size_t)val_surf->h * val_surf->pitch;
-        int val_offset = val_pixels - (Uint8 *)val_surf->pixels;
+        intptr_t val_offset = val_pixels - (Uint8 *)val_surf->pixels;
 
         copied_pixels = (Uint8 *)malloc(size);
         if (!copied_pixels) {

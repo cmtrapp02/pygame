@@ -195,7 +195,7 @@ size_text(Layout *ftext,
     const PGFT_char *chars = PGFT_String_GET_DATA(text);
     FT_Fixed y_scale = sz_metrics->y_scale;
     int have_kerning = FT_HAS_KERNING(font);
-    Py_ssize_t length = 0;
+    int length = 0;
     GlyphSlot *slots;
     GlyphIndex_t id;
     GlyphIndex_t prev_id = 0;
@@ -515,7 +515,7 @@ _PGFT_LoadGlyph(FontGlyph *glyph, GlyphIndex_t id,
 {
     static FT_Vector delta = {0, 0};
 
-    FT_Render_Mode rmode = (mode->render_flags & FT_RFLAG_ANTIALIAS ?
+    FT_Render_Mode rmode = ((mode->render_flags & FT_RFLAG_ANTIALIAS) ?
                             FT_RENDER_MODE_NORMAL : FT_RENDER_MODE_MONO);
     FT_Vector strong_delta = {0, 0};
     FT_Glyph image = 0;

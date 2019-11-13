@@ -45,7 +45,7 @@ zoomSurfaceRGBA(SDL_Surface *src, SDL_Surface *dst, int smooth)
         sstep;
     tColorRGBA *c00, *c01, *c10, *c11;
     tColorRGBA *sp, *csp, *dp;
-    int sgap, dgap;
+    int dgap;
 
     /*
      * Variable setup
@@ -99,9 +99,8 @@ zoomSurfaceRGBA(SDL_Surface *src, SDL_Surface *dst, int smooth)
     /*
      * Pointer setup
      */
-    sp = csp = (tColorRGBA *)src->pixels;
+    csp = (tColorRGBA *)src->pixels;
     dp = (tColorRGBA *)dst->pixels;
-    sgap = src->pitch - src->w * 4;
     dgap = dst->pitch - dst->w * 4;
 
     /*
@@ -288,7 +287,6 @@ transformSurfaceRGBA(SDL_Surface *src, SDL_Surface *dst, int cx, int cy,
                         c11 = *sp;
                     }
                     else if ((dx == -1) && (dy == sh)) {
-                        sp = (tColorRGBA *)(src->pixels);
                         sp = (tColorRGBA *)((Uint8 *)src->pixels +
                                             src->pitch * dy);
                         c00 = *sp;
@@ -541,7 +539,6 @@ rotozoomSurface(SDL_Surface *src, double angle, double zoom, int smooth)
                                  0x0000ff00, 0x00ff0000, 0xff000000);
         SDL_BlitSurface(src, NULL, rz_src, NULL);
         src_converted = 1;
-        is32bit = 1;
     }
 
     /*

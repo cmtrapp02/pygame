@@ -189,8 +189,10 @@ image_save(PyObject *self, PyObject *arg)
     PyObject *oencoded;
     PyObject *imgext = NULL;
     SDL_Surface *surf;
-    SDL_Surface *temp = NULL;
     int result = 1;
+#if IS_SDLv1
+    SDL_Surface *temp = NULL;
+#endif /* IS_SDLv1 */
 
     if (!PyArg_ParseTuple(arg, "O!O", &pgSurface_Type, &surfobj, &obj)) {
         return NULL;
@@ -278,12 +280,16 @@ image_save(PyObject *self, PyObject *arg)
     }
     Py_XDECREF(oencoded);
 
+#if IS_SDLv1
     if (temp) {
         SDL_FreeSurface(temp);
     }
     else {
         pgSurface_Unprep(surfobj);
     }
+#else  /* IS_SDLv2 */
+    pgSurface_Unprep(surfobj);
+#endif /* IS_SDLv2 */
 
     if (result == -2) {
         /* Python error raised elsewhere */
@@ -312,16 +318,17 @@ image_tostring(PyObject *self, PyObject *arg)
 {
     PyObject *surfobj, *string = NULL;
     char *format, *data, *pixels;
-    SDL_Surface *surf, *temp = NULL;
-    int w, h, color, flipped = 0;
+    SDL_Surface *surf;
+    int w, h, flipped = 0;
     Py_ssize_t len;
     Uint32 Rmask, Gmask, Bmask, Amask, Rshift, Gshift, Bshift, Ashift, Rloss,
         Gloss, Bloss, Aloss;
     int hascolorkey;
 #if IS_SDLv1
-    int colorkey;
+    SDL_Surface *temp = NULL;
+    int color, colorkey;
 #else  /* IS_SDLv2 */
-    Uint32 colorkey;
+    Uint32 color, colorkey;
 #endif /* IS_SDLv2 */
     Uint32 alpha;
 
@@ -374,13 +381,19 @@ image_tostring(PyObject *self, PyObject *arg)
         pgSurface_Unlock(surfobj);
     }
     else if (!strcmp(format, "RGB")) {
-        string = Bytes_FromStringAndSize(NULL, (Py_ssize_t)surf->w * surf->h * 3);
+        string =
+            Bytes_FromStringAndSize(NULL, (Py_ssize_t)surf->w * surf->h * 3);
         if (!string)
             return NULL;
         Bytes_AsStringAndSize(string, &data, &len);
 
+#if IS_SDLv1
         if (!temp)
             pgSurface_Lock(surfobj);
+#else  /* IS_SDLv2 */
+        pgSurface_Lock(surfobj);
+#endif /* IS_SDLv2 */
+
         pixels = (char *)surf->pixels;
         switch (surf->format->BytesPerPixel) {
             case 1:
@@ -441,14 +454,20 @@ image_tostring(PyObject *self, PyObject *arg)
                 }
                 break;
         }
+
+#if IS_SDLv1
         if (!temp)
             pgSurface_Unlock(surfobj);
+#else  /* IS_SDLv2 */
+        pgSurface_Unlock(surfobj);
+#endif /* IS_SDLv2 */
     }
     else if (!strcmp(format, "RGBX") || !strcmp(format, "RGBA")) {
         if (strcmp(format, "RGBA"))
             hascolorkey = 0;
 
-        string = Bytes_FromStringAndSize(NULL, (Py_ssize_t)surf->w * surf->h * 4);
+        string =
+            Bytes_FromStringAndSize(NULL, (Py_ssize_t)surf->w * surf->h * 4);
         if (!string)
             return NULL;
         Bytes_AsStringAndSize(string, &data, &len);
@@ -539,7 +558,8 @@ image_tostring(PyObject *self, PyObject *arg)
     else if (!strcmp(format, "ARGB")) {
         hascolorkey = 0;
 
-        string = Bytes_FromStringAndSize(NULL, (Py_ssize_t)surf->w * surf->h * 4);
+        string =
+            Bytes_FromStringAndSize(NULL, (Py_ssize_t)surf->w * surf->h * 4);
         if (!string)
             return NULL;
         Bytes_AsStringAndSize(string, &data, &len);
@@ -556,8 +576,7 @@ image_tostring(PyObject *self, PyObject *arg)
                         data[1] = (char)surf->format->palette->colors[color].r;
                         data[2] = (char)surf->format->palette->colors[color].g;
                         data[3] = (char)surf->format->palette->colors[color].b;
-                        data[0] = hascolorkey ? (char)(color != colorkey) * 255
-                                              : (char)255;
+                        data[0] = (char)255;
                         data += 4;
                     }
                 }
@@ -571,10 +590,7 @@ image_tostring(PyObject *self, PyObject *arg)
                         data[1] = (char)(((color & Rmask) >> Rshift) << Rloss);
                         data[2] = (char)(((color & Gmask) >> Gshift) << Gloss);
                         data[3] = (char)(((color & Bmask) >> Bshift) << Bloss);
-                        data[0] =
-                            hascolorkey
-                                ? (char)(color != colorkey) * 255
-                                : (char)(Amask ? (((color & Amask) >> Ashift)
+                        data[0] = (char)(Amask ? (((color & Amask) >> Ashift)
                                                   << Aloss)
                                                : 255);
                         data += 4;
@@ -595,10 +611,7 @@ image_tostring(PyObject *self, PyObject *arg)
                         data[1] = (char)(((color & Rmask) >> Rshift) << Rloss);
                         data[2] = (char)(((color & Gmask) >> Gshift) << Gloss);
                         data[3] = (char)(((color & Bmask) >> Bshift) << Bloss);
-                        data[0] =
-                            hascolorkey
-                                ? (char)(color != colorkey) * 255
-                                : (char)(Amask ? (((color & Amask) >> Ashift)
+                        data[0] = (char)(Amask ? (((color & Amask) >> Ashift)
                                                   << Aloss)
                                                : 255);
                         data += 4;
@@ -614,10 +627,7 @@ image_tostring(PyObject *self, PyObject *arg)
                         data[1] = (char)(((color & Rmask) >> Rshift) << Rloss);
                         data[2] = (char)(((color & Gmask) >> Gshift) << Gloss);
                         data[3] = (char)(((color & Bmask) >> Bshift) << Bloss);
-                        data[0] =
-                            hascolorkey
-                                ? (char)(color != colorkey) * 255
-                                : (char)(Amask ? (((color & Amask) >> Ashift)
+                        data[0] = (char)(Amask ? (((color & Amask) >> Ashift)
                                                   << Aloss)
                                                : 255);
                         data += 4;
@@ -635,7 +645,8 @@ image_tostring(PyObject *self, PyObject *arg)
 
         hascolorkey = 0;
 
-        string = Bytes_FromStringAndSize(NULL, (Py_ssize_t)surf->w * surf->h * 4);
+        string =
+            Bytes_FromStringAndSize(NULL, (Py_ssize_t)surf->w * surf->h * 4);
         if (!string)
             return NULL;
         Bytes_AsStringAndSize(string, &data, &len);
@@ -727,7 +738,8 @@ image_tostring(PyObject *self, PyObject *arg)
 
         hascolorkey = 0;
 
-        string = Bytes_FromStringAndSize(NULL, (Py_ssize_t)surf->w * surf->h * 4);
+        string =
+            Bytes_FromStringAndSize(NULL, (Py_ssize_t)surf->w * surf->h * 4);
         if (!string)
             return NULL;
         Bytes_AsStringAndSize(string, &data, &len);
@@ -812,13 +824,19 @@ image_tostring(PyObject *self, PyObject *arg)
         pgSurface_Unlock(surfobj);
     }
     else {
+#if IS_SDLv1
         if (temp)
             SDL_FreeSurface(temp);
+#endif /* IS_SDLv1 */
+
         return RAISE(PyExc_ValueError, "Unrecognized type of format");
     }
 
+#if IS_SDLv1
     if (temp)
         SDL_FreeSurface(temp);
+#endif /* IS_SDLv1 */
+
     return string;
 }
 
@@ -939,9 +957,34 @@ image_fromstring(PyObject *self, PyObject *arg)
     else
         return RAISE(PyExc_ValueError, "Unrecognized type of format");
 
-    if (!surf)
-        return NULL;
     return pgSurface_New(surf);
+}
+
+static int
+_as_read_buffer(PyObject *obj, const void **buffer, Py_ssize_t *buffer_len)
+{
+    Py_buffer view;
+
+    if (obj == NULL || buffer == NULL || buffer_len == NULL) {
+        return -1;
+    }
+    if (PyObject_GetBuffer(obj, &view, PyBUF_SIMPLE) != 0)
+        return -1;
+
+    *buffer = view.buf;
+    *buffer_len = view.len;
+    PyBuffer_Release(&view);
+    return 0;
+}
+/*
+pgObject_AsCharBuffer is backwards compatible for PyObject_AsCharBuffer.
+Because PyObject_AsCharBuffer is deprecated.
+*/
+int
+pgObject_AsCharBuffer(PyObject *obj, const char **buffer,
+                      Py_ssize_t *buffer_len)
+{
+    return _as_read_buffer(obj, (const void **)buffer, buffer_len);
 }
 
 PyObject *
@@ -961,7 +1004,7 @@ image_frombuffer(PyObject *self, PyObject *arg)
         return RAISE(PyExc_ValueError, "Resolution must be positive values");
 
     /* breaking constness here, we should really not change this string */
-    if (PyObject_AsCharBuffer(buffer, (const char **)&data, &len) == -1)
+    if (pgObject_AsCharBuffer(buffer, (const char **)&data, &len) == -1)
         return NULL;
 
     if (!strcmp(format, "P")) {
@@ -1231,7 +1274,7 @@ SaveTGA_RW(SDL_Surface *surface, SDL_RWops *out, int rle)
 #if IS_SDLv1
             entry[3] = (i == ckey) ? 0 : 0xff;
 #else  /* IS_SDLv2 */
-            entry[3] = (i == surf_colorkey) ? 0 : 0xff;
+            entry[3] = ((unsigned)i == surf_colorkey) ? 0 : 0xff;
 #endif /* IS_SDLv2 */
             if (!SDL_RWwrite(out, entry, h.cmap_bits >> 3, 1))
                 return -1;
@@ -1242,15 +1285,21 @@ SaveTGA_RW(SDL_Surface *surface, SDL_RWops *out, int rle)
                                    rmask, gmask, bmask, amask);
     if (!linebuf)
         return -1;
-    if (h.has_cmap)
+
+    if (h.has_cmap) {
 #if IS_SDLv1
         SDL_SetColors(linebuf, surface->format->palette->colors, 0,
                       surface->format->palette->ncolors);
 #else  /* IS_SDLv2 */
-        SDL_SetPaletteColors(linebuf->format->palette,
-                             surface->format->palette->colors, 0,
-                             surface->format->palette->ncolors);
+        if (0 != SDL_SetPaletteColors(linebuf->format->palette,
+                                      surface->format->palette->colors, 0,
+                                      surface->format->palette->ncolors)) {
+            /* SDL error already set. */
+            goto error;
+        }
 #endif /* IS_SDLv2 */
+    }
+
     if (rle) {
         rlebuf = malloc(bpp * surface->w + 1 + surface->w / TGA_RLE_MAX);
         if (!rlebuf) {
@@ -1306,10 +1355,14 @@ SaveTGA_RW(SDL_Surface *surface, SDL_RWops *out, int rle)
         SDL_SetColorKey(surface, SDL_TRUE, surf_colorkey);
 #endif /* IS_SDLv2 */
 
-error:
     free(rlebuf);
     SDL_FreeSurface(linebuf);
     return 0;
+
+error:
+    free(rlebuf);
+    SDL_FreeSurface(linebuf);
+    return -1;
 }
 
 static int
@@ -1391,29 +1444,34 @@ MODINIT_DEFINE(image)
         extload = PyObject_GetAttrString(extmodule, "load_extended");
         if (!extload) {
             Py_DECREF(extmodule);
+            DECREF_MOD(module);
             MODINIT_ERROR;
         }
         extsave = PyObject_GetAttrString(extmodule, "save_extended");
         if (!extsave) {
             Py_DECREF(extload);
             Py_DECREF(extmodule);
+            DECREF_MOD(module);
             MODINIT_ERROR;
         }
         if (PyModule_AddObject(module, "load_extended", extload)) {
             Py_DECREF(extload);
             Py_DECREF(extsave);
             Py_DECREF(extmodule);
+            DECREF_MOD(module);
             MODINIT_ERROR;
         }
         if (PyModule_AddObject(module, "save_extended", extsave)) {
             Py_DECREF(extsave);
             Py_DECREF(extmodule);
+            DECREF_MOD(module);
             MODINIT_ERROR;
         }
         Py_INCREF(extload);
         if (PyModule_AddObject(module, "load", extload)) {
             Py_DECREF(extload);
             Py_DECREF(extmodule);
+            DECREF_MOD(module);
             MODINIT_ERROR;
         }
         Py_DECREF(extmodule);
@@ -1423,10 +1481,27 @@ MODINIT_DEFINE(image)
         PyObject *basicload = PyObject_GetAttrString(module, "load_basic");
         PyErr_Clear();
         Py_INCREF(Py_None);
-        PyModule_AddObject(module, "load_extended", Py_None);
+        if (PyModule_AddObject(module, "load_extended", Py_None)) {
+            Py_DECREF(Py_None);
+            Py_DECREF(basicload);
+            DECREF_MOD(module);
+            MODINIT_ERROR;
+        }
+
         Py_INCREF(Py_None);
-        PyModule_AddObject(module, "save_extended", Py_None);
-        PyModule_AddObject(module, "load", basicload);
+        if (PyModule_AddObject(module, "save_extended", Py_None)) {
+            Py_DECREF(Py_None);
+            Py_DECREF(basicload);
+            DECREF_MOD(module);
+            MODINIT_ERROR;
+        }
+
+        if (PyModule_AddObject(module, "load", basicload)) {
+            Py_DECREF(basicload);
+            DECREF_MOD(module);
+            MODINIT_ERROR;
+        }
+
         st->is_extended = 0;
     }
     MODINIT_RETURN(module);

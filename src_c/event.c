@@ -38,16 +38,16 @@
 static int have_registered_events = 0;
 #endif /* IS_SDLv2 */
 
-// FIXME: The system message code is only tested on windows, so only
-//          include it there for now.
+// The system message code is only tested on windows, so only
+//   include it there for now.
 #include <SDL_syswm.h>
 
 /*this user event object is for safely passing
  *objects through the event queue.
  */
 
-#define USEROBJECT_CHECK1 0xDEADBEEF
-#define USEROBJECT_CHECK2 0xFEEDF00D
+#define USEROBJECT_CHECK1 (Sint32)0xDEADBEEF
+#define USEROBJECT_CHECK2 (Sint32)0xFEEDF00D
 
 typedef struct UserEventObject {
     struct UserEventObject *next;
@@ -100,6 +100,8 @@ pgEvent_AutoInit(PyObject *self, PyObject *args)
 }
 
 static char _pg_last_unicode_char[32] = { 0 };
+static SDL_Event *_pg_last_keydown_event = NULL;
+
 
 /*SDL 2 to SDL 1.2 event mapping and SDL 1.2 key repeat emulation*/
 static int
@@ -135,7 +137,10 @@ pg_event_filter(void *_, SDL_Event *event)
 #pragma PG_WARN(Add event blocking here.)
 
     else if (type == SDL_KEYDOWN) {
+#ifdef WIN32
         SDL_Event inputEvent[2];
+#endif /* WIN32 */
+
         if (event->key.repeat) {
             return 0;
         }
@@ -147,6 +152,8 @@ pg_event_filter(void *_, SDL_Event *event)
             _pg_repeat_timer = SDL_AddTimer(pg_key_repeat_delay, _pg_repeat_callback,
                                             NULL);
         }
+#ifdef WIN32
+        /* This does not seem to work on Mac 10.13. */
 #pragma PG_WARN(PumpEvents is not thread-safe)
         SDL_PumpEvents();
         if (SDL_PeepEvents(inputEvent, 1, SDL_PEEKEVENT,
@@ -159,11 +166,26 @@ pg_event_filter(void *_, SDL_Event *event)
                                    SDL_TEXTINPUT, SDL_TEXTINPUT) == 2)
                     ev = &inputEvent[1];
             }
+
+            /* Only copy size - 1. This will always leave the string
+             * terminated with a 0. */
             strncpy(_pg_last_unicode_char, ev->text.text,
-                    sizeof(_pg_last_unicode_char));
+                    sizeof(_pg_last_unicode_char) - 1);
         }
         else {
             _pg_last_unicode_char[0] = 0;
+        }
+#else
+        _pg_last_unicode_char[0] = 0;
+        /* store the keydown event for later in the SDL_TEXTINPUT */
+        _pg_last_keydown_event = event;
+#endif /* WIN32 */
+    }
+    else if (type == SDL_TEXTINPUT) {
+        if (_pg_last_keydown_event != NULL) {
+            strncpy(_pg_last_unicode_char, event->text.text,
+                    sizeof(_pg_last_unicode_char) -1);
+            _pg_last_keydown_event = NULL;
         }
     }
     else if (type == SDL_KEYUP) {
@@ -223,7 +245,8 @@ static int
 pg_EnableKeyRepeat(int delay, int interval)
 {
     if (delay < 0 || interval < 0) {
-        RAISE(PyExc_ValueError, "delay and interval must equal at least 0");
+        PyErr_SetString(PyExc_ValueError,
+                        "delay and interval must equal at least 0");
         return -1;
     }
     pg_key_repeat_delay = delay;
@@ -425,6 +448,8 @@ _pg_insobj(PyObject *dict, char *name, PyObject *v)
     }
 }
 
+#if IS_SDLv1
+
 #if defined(Py_USING_UNICODE)
 
 static PyObject *
@@ -478,6 +503,8 @@ _pg_our_empty_ustr(void)
 }
 
 #endif /* Py_USING_UNICODE */
+
+#endif /* IS_SDLv1 */
 
 static PyObject *
 dict_from_event(SDL_Event *event)
@@ -1087,7 +1114,10 @@ pg_Event(PyObject *self, PyObject *arg, PyObject *keywords)
         PyObject *key, *value;
         Py_ssize_t pos = 0;
         while (PyDict_Next(keywords, &pos, &key, &value)) {
-            PyDict_SetItem(dict, key, value);
+            if (PyDict_SetItem(dict, key, value) < 0) {
+                Py_DECREF(dict);
+                return NULL; /* Exception already set. */
+            }
         }
     }
 
@@ -1127,10 +1157,16 @@ set_grab(PyObject *self, PyObject *arg)
 #else  /* IS_SDLv2 */
     win = pg_GetDefaultWindow();
     if (win) {
-        if (doit)
+        if (doit) {
             SDL_SetWindowGrab(win, SDL_TRUE);
-        else
+            if (SDL_ShowCursor(SDL_QUERY) == SDL_DISABLE)
+                SDL_SetRelativeMouseMode(1);
+            else SDL_SetRelativeMouseMode(0);
+            }
+        else {
             SDL_SetWindowGrab(win, SDL_FALSE);
+            SDL_SetRelativeMouseMode(0);
+            }
     }
 #endif /* IS_SDLv2 */
 
@@ -1259,7 +1295,8 @@ pg_event_clear(PyObject *self, PyObject *args, PyObject *kwargs)
 static PyObject *
 pg_event_clear(PyObject *self, PyObject *args, PyObject *kwargs)
 {
-    int loop, num;
+    Py_ssize_t num;
+    int loop;
     PyObject *type = NULL;
     int dopump = 1;
     int val;
@@ -1396,10 +1433,11 @@ static PyObject *
 pg_event_get(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     SDL_Event event;
-    int loop, num;
+    Py_ssize_t num;
+    int loop;
     PyObject *type = NULL, *list;
     int dopump = 1;
-    int val;
+    int val, ret;
 
     static char *kwids[] = {
         "eventtype",
@@ -1443,21 +1481,32 @@ pg_event_get(PyObject *self, PyObject *args, PyObject *kwargs)
                     PyExc_TypeError,
                     "type sequence must contain valid event types");
             }
-            if (SDL_PeepEvents(&event, 1, SDL_GETEVENT, val, val) < 0) {
+
+            ret = SDL_PeepEvents(&event, 1, SDL_GETEVENT, val, val);
+
+            if (ret < 0) {
                 Py_DECREF(list);
                 return RAISE(pgExc_SDLError, SDL_GetError());
             }
-            if(!_pg_event_append_to_list(list, &event))
-                return NULL;
+            else if (ret > 0) {
+                if (!_pg_event_append_to_list(list, &event)) {
+                    return NULL;
+                }
+            }
         }
     }
     else if (pg_IntFromObj(type, &val)) {
-        if (SDL_PeepEvents(&event, 1, SDL_GETEVENT, val, val) < 0) {
+        ret = SDL_PeepEvents(&event, 1, SDL_GETEVENT, val, val);
+
+        if (ret < 0) {
             Py_DECREF(list);
             return RAISE(pgExc_SDLError, SDL_GetError());
         }
-        if(!_pg_event_append_to_list(list, &event))
-            return NULL;
+        else if (ret > 0) {
+            if (!_pg_event_append_to_list(list, &event)) {
+                return NULL;
+            }
+        }
     }
     else {
         Py_DECREF(list);
@@ -1535,8 +1584,9 @@ static PyObject *
 pg_event_peek(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     SDL_Event event;
+    Py_ssize_t num;
     int result;
-    int loop, num;
+    int loop;
     PyObject *type = NULL;
     int val;
     int dopump = 1;
@@ -1583,6 +1633,8 @@ pg_event_peek(PyObject *self, PyObject *args, PyObject *kwargs)
                 return PyInt_FromLong(1);
             }
         }
+
+        return PyInt_FromLong(0); /* No event type match. */
     }
     else if (pg_IntFromObj(type, &val)) {
         result = SDL_PeepEvents(&event, 1, SDL_PEEKEVENT, val, val);
@@ -1642,7 +1694,8 @@ _pg_check_event_in_range(int evt)
 static PyObject *
 pg_event_set_allowed(PyObject *self, PyObject *args)
 {
-    int loop, num;
+    Py_ssize_t num;
+    int loop;
     PyObject *type;
     int val;
 
@@ -1686,7 +1739,8 @@ pg_event_set_allowed(PyObject *self, PyObject *args)
 static PyObject *
 pg_event_set_blocked(PyObject *self, PyObject *args)
 {
-    int loop, num;
+    Py_ssize_t num;
+    int loop;
     PyObject *type;
     int val;
 
@@ -1730,7 +1784,8 @@ pg_event_set_blocked(PyObject *self, PyObject *args)
 static PyObject *
 pg_event_get_blocked(PyObject *self, PyObject *args)
 {
-    int loop, num;
+    Py_ssize_t num;
+    int loop;
     PyObject *type;
     int val;
     int isblocked = 0;

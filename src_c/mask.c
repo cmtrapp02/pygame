@@ -61,7 +61,16 @@ create_mask_using_bitmask(bitmask_t *bitmask);
 static PG_INLINE pgMaskObject *
 create_mask_using_bitmask_and_type(bitmask_t *bitmask, PyTypeObject *ob_type);
 
-/* mask object methods */
+/********** mask helper functions **********/
+
+/* Calculate the absolute difference between 2 Uint32s. */
+static PG_INLINE Uint32
+abs_diff_uint32(Uint32 a, Uint32 b)
+{
+    return (a > b) ? a - b : b - a;
+}
+
+/********** mask object methods **********/
 
 /* Copies the given mask. */
 static PyObject *
@@ -455,7 +464,22 @@ mask_outline(PyObject *self, PyObject *args)
                 firstx = x;
                 firsty = y;
                 value = Py_BuildValue("(ii)", x - 1, y - 1);
-                PyList_Append(plist, value);
+
+                if (NULL == value) {
+                    Py_DECREF(plist);
+                    bitmask_free(m);
+
+                    return NULL; /* Exception already set. */
+                }
+
+                if (0 != PyList_Append(plist, value)) {
+                    Py_DECREF(value);
+                    Py_DECREF(plist);
+                    bitmask_free(m);
+
+                    return NULL; /* Exception already set. */
+                }
+
                 Py_DECREF(value);
                 break;
             }
@@ -481,7 +505,22 @@ mask_outline(PyObject *self, PyObject *args)
             if (!e) {
                 e = every;
                 value = Py_BuildValue("(ii)", secx - 1, secy - 1);
-                PyList_Append(plist, value);
+
+                if (NULL == value) {
+                    Py_DECREF(plist);
+                    bitmask_free(m);
+
+                    return NULL; /* Exception already set. */
+                }
+
+                if (0 != PyList_Append(plist, value)) {
+                    Py_DECREF(value);
+                    Py_DECREF(plist);
+                    bitmask_free(m);
+
+                    return NULL; /* Exception already set. */
+                }
+
                 Py_DECREF(value);
             }
             break;
@@ -508,8 +547,24 @@ mask_outline(PyObject *self, PyObject *args)
                         (secx == nextx && secy == nexty)) {
                         break;
                     }
+
                     value = Py_BuildValue("(ii)", nextx - 1, nexty - 1);
-                    PyList_Append(plist, value);
+
+                    if (NULL == value) {
+                        Py_DECREF(plist);
+                        bitmask_free(m);
+
+                        return NULL; /* Exception already set. */
+                    }
+
+                    if (0 != PyList_Append(plist, value)) {
+                        Py_DECREF(value);
+                        Py_DECREF(plist);
+                        bitmask_free(m);
+
+                        return NULL; /* Exception already set. */
+                    }
+
                     Py_DECREF(value);
                 }
                 break;
@@ -536,7 +591,7 @@ mask_convolve(PyObject *aobj, PyObject *args)
 {
     PyObject *bobj = NULL;
     PyObject *oobj = Py_None;
-    bitmask_t *a = NULL, *b = NULL, *output = NULL;
+    bitmask_t *a = NULL, *b = NULL;
     int xoffset = 0, yoffset = 0;
 
     if (!PyArg_ParseTuple(args, "O!|O(ii)", &pgMask_Type, &bobj, &oobj,
@@ -613,9 +668,11 @@ set_pixel_color(Uint8 *pixel, Uint8 bpp, Uint32 color)
     switch (bpp) {
         case 1:
             *pixel = color;
+            break;
 
         case 2:
             *(Uint16 *)pixel = color;
+            break;
 
         case 3:
 #if SDL_BYTEORDER == SDL_LIL_ENDIAN
@@ -626,9 +683,11 @@ set_pixel_color(Uint8 *pixel, Uint8 bpp, Uint32 color)
             pixel[1] = color >> 8;
             pixel[0] = color >> 16;
 #endif /* SDL_LIL_ENDIAN */
+            break;
 
         default: /* case 4: */
             *(Uint32 *)pixel = color;
+            break;
     }
 }
 
@@ -788,7 +847,6 @@ bitmask_threshold(bitmask_t *m, SDL_Surface *surf, SDL_Surface *surf2,
     Uint8 tr, tg, tb, ta;
     int bpp1, bpp2;
 
-    pixels = (Uint8 *)surf->pixels;
     format = surf->format;
     rmask = format->Rmask;
     gmask = format->Gmask;
@@ -889,19 +947,22 @@ bitmask_threshold(bitmask_t *m, SDL_Surface *surf, SDL_Surface *surf2,
                        value. This is useful for 8bit images that aren't
                        actually using the palette.
                     */
-                    if ((abs((the_color2) - (the_color)) < tr)) {
+                    if (abs_diff_uint32(the_color2, the_color) < tr) {
                         /* this pixel is within the threshold of othersurface.
                          */
                         bitmask_setbit(m, x, y);
                     }
                 }
-                else if ((abs((((the_color2 & rmask2) >> rshift2) << rloss2) -
+                else if ((abs_diff_uint32(
+                              (((the_color2 & rmask2) >> rshift2) << rloss2),
                               (((the_color & rmask) >> rshift) << rloss)) <
-                          tr) &
-                         (abs((((the_color2 & gmask2) >> gshift2) << gloss2) -
+                          tr) &&
+                         (abs_diff_uint32(
+                              (((the_color2 & gmask2) >> gshift2) << gloss2),
                               (((the_color & gmask) >> gshift) << gloss)) <
-                          tg) &
-                         (abs((((the_color2 & bmask2) >> bshift2) << bloss2) -
+                          tg) &&
+                         (abs_diff_uint32(
+                              (((the_color2 & bmask2) >> bshift2) << bloss2),
                               (((the_color & bmask) >> bshift) << bloss)) <
                           tb)) {
                     /* this pixel is within the threshold of othersurface. */
@@ -912,11 +973,14 @@ bitmask_threshold(bitmask_t *m, SDL_Surface *surf, SDL_Surface *surf2,
                    TODO: will need to handle the case where palette_colors == 0
                 */
             }
-            else if ((abs((((the_color & rmask) >> rshift) << rloss) - r) <
-                      tr) &
-                     (abs((((the_color & gmask) >> gshift) << gloss) - g) <
-                      tg) &
-                     (abs((((the_color & bmask) >> bshift) << bloss) - b) <
+            else if ((abs_diff_uint32(
+                          (((the_color & rmask) >> rshift) << rloss), r) <
+                      tr) &&
+                     (abs_diff_uint32(
+                          (((the_color & gmask) >> gshift) << gloss), g) <
+                      tg) &&
+                     (abs_diff_uint32(
+                          (((the_color & bmask) >> bshift) << bloss), b) <
                       tb)) {
                 /* this pixel is within the threshold of the color. */
                 bitmask_setbit(m, x, y);
@@ -931,7 +995,6 @@ mask_from_threshold(PyObject *self, PyObject *args)
     PyObject *surfobj, *surfobj2 = NULL;
     pgMaskObject *maskobj = NULL;
     SDL_Surface *surf = NULL, *surf2 = NULL;
-    int bpp;
     PyObject *rgba_obj_color, *rgba_obj_threshold = NULL;
     Uint8 rgba_color[4];
     Uint8 rgba_threshold[4] = {0, 0, 0, 255};
@@ -982,7 +1045,6 @@ mask_from_threshold(PyObject *self, PyObject *args)
                         rgba_threshold[2], rgba_threshold[3]);
     }
 
-    bpp = surf->format->BytesPerPixel;
     maskobj = CREATE_MASK_OBJ(surf->w, surf->h, 0);
 
     if (NULL == maskobj) {
@@ -1212,11 +1274,13 @@ cc_label(bitmask_t *input, unsigned int *image, unsigned int *ufind,
  *
  * Allocates memory for rects.
  *
+ * NOTE: Caller is responsible for freeing the "ret_rects" memory.
+ *
  * Params:
  *     input - mask to search in for the connected components to bound
  *     num_bounding_boxes - passes back the number of bounding rects found
- *     rects - passes back the bounding rects that are found, memory is
- *         allocated
+ *     ret_rects - passes back the bounding rects that are found with the first
+ *         rect at index 1, memory is allocated
  *
  * Returns:
  *     0 on success
@@ -1227,11 +1291,11 @@ get_bounding_rects(bitmask_t *input, int *num_bounding_boxes,
                    GAME_Rect **ret_rects)
 {
     unsigned int *image, *ufind, *largest, *buf;
-    int x, y, w, h, temp, label, relabel;
+    unsigned int x_uf, label = 0;
+    int x, y, w, h, temp, relabel;
     GAME_Rect *rects;
 
     rects = NULL;
-    label = 0;
 
     w = input->w;
     h = input->h;
@@ -1250,11 +1314,14 @@ get_bounding_rects(bitmask_t *input, int *num_bounding_boxes,
     /* the union-find array. see wikipedia for info on union find */
     ufind = (unsigned int *)malloc(sizeof(int) * (w / 2 + 1) * (h / 2 + 1));
     if (!ufind) {
+        free(image);
         return -2;
     }
 
     largest = (unsigned int *)malloc(sizeof(int) * (w / 2 + 1) * (h / 2 + 1));
     if (!largest) {
+        free(image);
+        free(ufind);
         return -2;
     }
 
@@ -1265,13 +1332,13 @@ get_bounding_rects(bitmask_t *input, int *num_bounding_boxes,
     /* flatten and relabel the union-find equivalence array.  Start at label 1
        because label 0 indicates an unset pixel.  For this reason, we also use
        <= label rather than < label. */
-    for (x = 1; x <= label; x++) {
-        if (ufind[x] < x) {             /* is it a union find root? */
-            ufind[x] = ufind[ufind[x]]; /* relabel it to its root */
+    for (x_uf = 1; x_uf <= label; ++x_uf) {
+        if (ufind[x_uf] < x_uf) {             /* is it a union find root? */
+            ufind[x_uf] = ufind[ufind[x_uf]]; /* relabel it to its root */
         }
         else { /* its a root */
             relabel++;
-            ufind[x] = relabel; /* assign the lowest label available */
+            ufind[x_uf] = relabel; /* assign the lowest label available */
         }
     }
 
@@ -1289,6 +1356,9 @@ get_bounding_rects(bitmask_t *input, int *num_bounding_boxes,
     /* the bounding rects, need enough space for the number of labels */
     rects = (GAME_Rect *)malloc(sizeof(GAME_Rect) * (relabel + 1));
     if (!rects) {
+        free(image);
+        free(ufind);
+        free(largest);
         return -2;
     }
 
@@ -1336,12 +1406,12 @@ mask_get_bounding_rects(PyObject *self, PyObject *args)
     GAME_Rect *regions;
     GAME_Rect *aregion;
     int num_bounding_boxes, i, r;
-    PyObject *ret;
+    PyObject *rect_list;
     PyObject *rect;
 
     bitmask_t *mask = pgMask_AsBitmap(self);
 
-    ret = NULL;
+    rect_list = NULL;
     regions = NULL;
     aregion = NULL;
 
@@ -1359,21 +1429,41 @@ mask_get_bounding_rects(PyObject *self, PyObject *args)
                      "Not enough memory to get bounding rects. \n");
     }
 
-    ret = PyList_New(0);
-    if (!ret)
-        return NULL;
+    rect_list = PyList_New(0);
+
+    if (!rect_list) {
+        free(regions);
+
+        return NULL; /* Exception already set. */
+    }
 
     /* build a list of rects to return.  Starts at 1 because we never use 0. */
     for (i = 1; i <= num_bounding_boxes; i++) {
         aregion = regions + i;
         rect = pgRect_New4(aregion->x, aregion->y, aregion->w, aregion->h);
-        PyList_Append(ret, rect);
+
+        if (NULL == rect) {
+            Py_DECREF(rect_list);
+            free(regions);
+
+            return RAISE(PyExc_MemoryError,
+                         "cannot allocate memory for bounding rects");
+        }
+
+        if (0 != PyList_Append(rect_list, rect)) {
+            Py_DECREF(rect);
+            Py_DECREF(rect_list);
+            free(regions);
+
+            return NULL; /* Exception already set. */
+        }
+
         Py_DECREF(rect);
     }
 
     free(regions);
 
-    return ret;
+    return rect_list;
 }
 
 /* Finds all the connected components in a given mask.
@@ -1386,7 +1476,8 @@ mask_get_bounding_rects(PyObject *self, PyObject *args)
  *     mask - mask to search in for the connected components
  *     components - passes back an array of connected component masks with the
  *         first component at index 1, memory is allocated
- *     min - minimum number of pixels for a component to be considered
+ *     min - minimum number of pixels for a component to be considered,
+ *         defaults to 0 for negative values
  *
  * Returns:
  *     the number of connected components (>= 0)
@@ -1396,10 +1487,9 @@ static int
 get_connected_components(bitmask_t *mask, bitmask_t ***components, int min)
 {
     unsigned int *image, *ufind, *largest, *buf;
-    int x, y, w, h, label, relabel;
+    unsigned int x_uf, min_cc, label = 0;
+    int x, y, w, h, relabel;
     bitmask_t **comps;
-
-    label = 0;
 
     w = mask->w;
     h = mask->h;
@@ -1432,27 +1522,29 @@ get_connected_components(bitmask_t *mask, bitmask_t ***components, int min)
     /* do the initial labelling */
     label = cc_label(mask, image, ufind, largest);
 
-    for (x = 1; x <= label; x++) {
-        if (ufind[x] < x) {
-            largest[ufind[x]] += largest[x];
+    for (x_uf = 1; x_uf <= label; ++x_uf) {
+        if (ufind[x_uf] < x_uf) {
+            largest[ufind[x_uf]] += largest[x_uf];
         }
     }
 
     relabel = 0;
+    min_cc = (0 < min) ? (unsigned int)min : 0;
+
     /* flatten and relabel the union-find equivalence array.  Start at label 1
        because label 0 indicates an unset pixel.  For this reason, we also use
        <= label rather than < label. */
-    for (x = 1; x <= label; x++) {
-        if (ufind[x] < x) {             /* is it a union find root? */
-            ufind[x] = ufind[ufind[x]]; /* relabel it to its root */
+    for (x_uf = 1; x_uf <= label; ++x_uf) {
+        if (ufind[x_uf] < x_uf) {             /* is it a union find root? */
+            ufind[x_uf] = ufind[ufind[x_uf]]; /* relabel it to its root */
         }
         else { /* its a root */
-            if (largest[x] >= min) {
+            if (largest[x_uf] >= min_cc) {
                 relabel++;
-                ufind[x] = relabel; /* assign the lowest label available */
+                ufind[x_uf] = relabel; /* assign the lowest label available */
             }
             else {
-                ufind[x] = 0;
+                ufind[x_uf] = 0;
             }
         }
     }
@@ -1523,25 +1615,38 @@ mask_connected_components(PyObject *self, PyObject *args)
 
     mask_list = PyList_New(0);
     if (!mask_list) {
+        /* Components were allocated starting at index 1. */
+        for (i = 1; i <= num_components; ++i) {
+            bitmask_free(components[i]);
+        }
+
+        free(components);
         return NULL; /* Exception already set. */
     }
 
+    /* Components were allocated starting at index 1. */
     for (i = 1; i <= num_components; ++i) {
         maskobj = create_mask_using_bitmask(components[i]);
 
         if (NULL == maskobj) {
+            /* Starting freeing with the current index. */
             for (m = i; m <= num_components; ++m) {
                 bitmask_free(components[m]);
             }
+
+            free(components);
             Py_DECREF(mask_list);
             return NULL; /* Exception already set. */
         }
 
         if (0 != PyList_Append(mask_list, (PyObject *)maskobj)) {
-            /* Can't append to the list. */
+            /* Can't append to the list. Starting freeing with the next index
+             * as maskobj contains the component from the current index. */
             for (m = i + 1; m <= num_components; ++m) {
                 bitmask_free(components[m]);
             }
+
+            free(components);
             Py_DECREF((PyObject *)maskobj);
             Py_DECREF(mask_list);
             return NULL; /* Exception already set. */
@@ -1706,7 +1811,7 @@ extract_color(SDL_Surface *surf, PyObject *color_obj, Uint8 rgba_color[],
     else if (PyInt_Check(color_obj)) {
         long intval = PyInt_AsLong(color_obj);
 
-        if ((-1 == intval && PyErr_Occurred()) || intval > 0xFFFFFFFF) {
+        if ((-1 == intval && PyErr_Occurred()) || intval > (long)0xFFFFFFFF) {
             PyErr_SetString(PyExc_ValueError, "invalid color argument");
             return 0;
         }
@@ -1839,7 +1944,7 @@ draw_to_surface(SDL_Surface *surf, bitmask_t *bitmask, int x_dest, int y_dest,
     else {
         /* Draw using surfaces and color values. */
         Uint8 *setpixel = NULL, *unsetpixel = NULL;
-        int use_setsurf = 0, use_unsetsurf = 0;
+        int use_setsurf, use_unsetsurf;
 
         /* Looping over each bit in the mask and deciding whether to use a
          * color from setsurf/unsetsurf or from setcolor/unsetcolor. */

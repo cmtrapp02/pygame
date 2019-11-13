@@ -1881,17 +1881,13 @@ _vector2_set(pgVector *self, PyObject *xOrSequence, PyObject *y)
         }
     }
 
-    if (y) {
-        if (RealNumber_Check(y)) {
-            self->coords[1] = PyFloat_AsDouble(y);
-        }
-        else {
-            goto error;
-        }
+    if (RealNumber_Check(y)) {
+        self->coords[1] = PyFloat_AsDouble(y);
     }
     else {
         goto error;
     }
+
     /* success initialization */
     return 0;
 error:
@@ -3256,7 +3252,8 @@ vector_elementwiseproxy_dealloc(vector_elementwiseproxy *it)
 static PyObject *
 vector_elementwiseproxy_richcompare(PyObject *o1, PyObject *o2, int op)
 {
-    Py_ssize_t i, dim, ret;
+    Py_ssize_t i, dim;
+    int ret = 1;
     double diff, value;
     double *other_coords;
     pgVector *vec;
@@ -3283,7 +3280,6 @@ vector_elementwiseproxy_richcompare(PyObject *o1, PyObject *o2, int op)
         other = (PyObject *)((vector_elementwiseproxy *)other)->vec;
     dim = vec->dim;
 
-    ret = 1;
     if (pgVectorCompatible_Check(other, dim)) {
         other_coords = PyMem_New(double, dim);
         if (other_coords == NULL) {
@@ -3660,8 +3656,8 @@ vector_elementwiseproxy_pow(PyObject *baseObj, PyObject *expoObj,
 {
     Py_ssize_t i, dim;
     double *tmp;
-    PyObject *bases[VECTOR_MAX_SIZE];
-    PyObject *expos[VECTOR_MAX_SIZE];
+    PyObject *bases[VECTOR_MAX_SIZE] = {NULL};
+    PyObject *expos[VECTOR_MAX_SIZE] = {NULL};
     PyObject *ret, *result;
     if (mod != Py_None) {
         PyErr_SetString(PyExc_TypeError,

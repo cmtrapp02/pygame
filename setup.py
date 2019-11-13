@@ -15,7 +15,7 @@ EXTRAS = {}
 
 METADATA = {
     "name":             "pygame",
-    "version":          "2.0.0.dev3",
+    "version":          "2.0.0.dev7",
     "license":          "LGPL",
     "url":              "https://www.pygame.org",
     "author":           "A community project.",
@@ -24,6 +24,7 @@ METADATA = {
     "long_description": DESCRIPTION,
 }
 
+import re
 import sys
 import os
 
@@ -269,7 +270,7 @@ try:
     if sin_mtime > s_mtime:
         print ('\n\nWARNING, "buildconfig/Setup.SDL1.in" newer than "Setup",'
                'you might need to modify "Setup".')
-except:
+except OSError:
     pass
 
 # get compile info for all extensions
@@ -398,14 +399,12 @@ add_datafiles(data_files, 'pygame/docs',
 
 #generate the version module
 def parse_version(ver):
-    from re import findall
-    return ', '.join(s for s in findall(r'\d+', ver)[0:3])
+    return ', '.join(s for s in re.findall(r'\d+', ver)[0:3])
 
 def parse_source_version():
     pgh_major = -1
     pgh_minor = -1
     pgh_patch = -1
-    import re
     major_exp_search = re.compile(r'define\s+PG_MAJOR_VERSION\s+([0-9]+)').search
     minor_exp_search = re.compile(r'define\s+PG_MINOR_VERSION\s+([0-9]+)').search
     patch_exp_search = re.compile(r'define\s+PG_PATCH_VERSION\s+([0-9]+)').search
@@ -710,87 +709,3 @@ try:
 except:
     compilation_help()
     raise
-
-
-def remove_old_files():
-
-    # try and figure out where we are installed.
-
-    #pygame could be installed in a weird location because of
-    #  setuptools or something else.  The only sane way seems to be by trying
-    #  first to import it, and see where the imported one is.
-    #
-    # Otherwise we might delete some files from another installation.
-    try:
-        import pygame.base
-        use_pygame = 1
-    except ImportError:
-        use_pygame = 0
-
-    if use_pygame:
-        install_path= os.path.split(pygame.base.__file__)[0]
-        extension_ext = os.path.splitext(pygame.base.__file__)[1]
-    else:
-        if not os.path.exists(data_path):
-            return
-
-        install_path = data_path
-
-        base_file = glob.glob(os.path.join(data_path, "base*"))
-        if not base_file:
-            return
-
-        extension_ext = os.path.splitext(base_file[0])[1]
-
-
-
-    # here are the .so/.pyd files we need to ask to remove.
-    ext_to_remove = ["camera"]
-
-    # here are the .py/.pyo/.pyc files we need to ask to remove.
-    py_to_remove = ["color"]
-
-    os.path.join(data_path, 'color.py')
-    if os.name == "e32": # Don't warn on Symbian. The color.py is used as a wrapper.
-        py_to_remove = []
-
-
-
-    # See if any of the files are there.
-    extension_files = ["%s%s" % (x, extension_ext) for x in ext_to_remove]
-
-    py_files = ["%s%s" % (x, py_ext)
-                for py_ext in [".py", ".pyc", ".pyo"]
-                for x in py_to_remove]
-
-    files = py_files + extension_files
-
-    unwanted_files = []
-    for f in files:
-        unwanted_files.append( os.path.join( install_path, f ) )
-
-
-
-    ask_remove = []
-    for f in unwanted_files:
-        if os.path.exists(f):
-            ask_remove.append(f)
-
-    for f in ask_remove:
-        try:
-            print("trying to remove old file :%s: ..." %f)
-            os.remove(f)
-            print("Successfully removed :%s:." % f)
-        except:
-            print("FAILED to remove old file :%s:" % f)
-
-
-
-if "install" in sys.argv:
-    # remove some old files.
-    # only call after a successful install.  Should only reach here if there is
-    #   a successful install... otherwise setup() raises an error.
-    try:
-        remove_old_files()
-    except:
-        pass

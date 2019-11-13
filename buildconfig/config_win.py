@@ -10,13 +10,10 @@ except ImportError:
 
 import os, sys
 import re
+import logging
 from glob import glob
 from distutils.sysconfig import get_python_inc
 
-try:
-    raw_input
-except NameError:
-    raw_input = input
 
 def get_ptr_size():
     return 64 if sys.maxsize > 2**32 else 32
@@ -95,21 +92,16 @@ class Dependency(object):
             if print_result:
                 print ("Path for %s: %s" % (self.name, self.path))
         else:
-            print ("Select path for %s:" % self.name)
-            for i in range(len(self.paths)):
-                print ("  %i=%s" % (i + 1, self.paths[i]))
-            print ("  %i = <Nothing>" % 0)
-            choice = raw_input("Select 0-%i (1=default):" % len(self.paths))
-            if not choice: choice = 1
-            else: choice = int(choice)
-            if(choice):
-                self.path = self.paths[choice-1]
+            logging.warning("Multiple paths to choose from:%s", self.paths)
+            self.path = self.paths[0]
+            if print_result:
+                print ("Path for %s: %s" % (self.name, self.path))
         return True
 
     def matchfile(self, path, match):
         try:
             entries = os.listdir(path)
-        except:
+        except OSError:
             pass
         else:
             for e in entries:
@@ -250,7 +242,7 @@ class DependencyDLL(Dependency):
             path = os.path.join(root, dir)
             try:
                 entries = os.listdir(path)
-            except:
+            except OSError:
                 pass
             else:
                 for e in entries:
@@ -508,43 +500,35 @@ def setup_prebuilt_sdl2(prebuilt_dir):
     return list(DEPS)
 
 def setup_prebuilt_sdl1(prebuilt_dir):
-    setup_ = open('Setup', 'w')
-    #is_pypy = '__pypy__' in sys.builtin_module_names
-    #import platform
-    #is_python3 = platform.python_version().startswith('3')
-
-    try:
+    with open('Setup', 'w') as setup_:
         try:
-            setup_win_in = open(os.path.join(prebuilt_dir, 'Setup_Win.in'))
-        except IOError:
-            raise IOError("%s missing required Setup_Win.in" % prebuilt_dir)
+            try:
+                setup_win_in = open(os.path.join(prebuilt_dir, 'Setup_Win.in'))
+            except IOError:
+                raise IOError("%s missing required Setup_Win.in" % prebuilt_dir)
 
-        # Copy Setup.in to Setup, replacing the BeginConfig/EndConfig
-        # block with prebuilt\Setup_Win.in .
-        setup_in = open(os.path.join('buildconfig', 'Setup.SDL1.in'))
-        try:
-            do_copy = True
-            for line in setup_in:
-                if line.startswith('#--StartConfig'):
-                    do_copy = False
-                    setup_.write(setup_win_in.read())
-                    try:
-                        setup_win_common_in = open(os.path.join('buildconfig', 'Setup_Win_Common.in'))
-                    except:
-                        pass
-                    else:
-                        try:
-                            setup_.write(setup_win_common_in.read())
-                        finally:
-                            setup_win_common_in.close()
-                elif line.startswith('#--EndConfig'):
+            # Copy Setup.in to Setup, replacing the BeginConfig/EndConfig
+            # block with prebuilt\Setup_Win.in .
+            with open(os.path.join('buildconfig', 'Setup.SDL1.in')) as setup_in:
+                try:
                     do_copy = True
-                elif do_copy:
-                    setup_.write(line)
-        finally:
-            setup_in.close()
-    finally:
-        setup_.close()
+                    for line in setup_in:
+                        if line.startswith('#--StartConfig'):
+                            do_copy = False
+                            setup_.write(setup_win_in.read())
+                            try:
+                                with open(os.path.join('buildconfig', 'Setup_Win_Common.in')) as setup_win_common_in:
+                                    setup_.write(setup_win_common_in.read())
+                            except OSError:
+                                pass
+                        elif line.startswith('#--EndConfig'):
+                            do_copy = True
+                        elif do_copy:
+                            setup_.write(line)
+                except OSError:
+                    pass
+        except OSError:
+            pass
 
     print("Wrote to \"Setup\".")
 
@@ -582,8 +566,8 @@ def main(sdl2=False):
             if 'PYGAME_USE_PREBUILT' in os.environ:
                 use_prebuilt = os.environ['PYGAME_USE_PREBUILT'] == '1'
             else:
-                reply = raw_input('\nUse the SDL libraries in "%s"? [Y/n]' % prebuilt_dir)
-                use_prebuilt = (not reply) or reply[0].lower() != 'n'
+                logging.warning('Using the SDL libraries in "%s".' % prebuilt_dir)
+                use_prebuilt = True
 
         if use_prebuilt:
             if sdl2:
